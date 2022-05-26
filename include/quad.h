@@ -44,9 +44,11 @@ class quad_class
     bool _received_cmd = false;
     int uav_id;
     std::string _id, _mesh_resource;
-    double _simulation_interval, _state_pub_rate, _max_vel, _timeout, _yaw_offset, last_yaw;
-    double _p_gain, _d_gain;
+    double _simulation_interval, _state_pub_rate, _timeout, _yaw_offset, last_yaw;
+    double _max_vel;
+    double _p_gain, _i_gain, _d_gain;
     Eigen::Vector3d _start;
+    Eigen::Vector3d _accumulated_vel_error;
 
     std::mutex command_mutex;
     std::mutex odometry_mutex;
@@ -89,6 +91,7 @@ class quad_class
         _nh.param<double>("yaw_offset", _yaw_offset, 0.0);
 
         _nh.param<double>("p_gain", _p_gain, 1.0);
+        _nh.param<double>("i_gain", _i_gain, 1.0);
         _nh.param<double>("d_gain", _d_gain, 1.0);
 
 		_simulation_interval = 1 / _state_pub_rate;

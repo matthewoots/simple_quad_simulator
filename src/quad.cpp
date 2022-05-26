@@ -71,9 +71,18 @@ void quad_class::update_odom()
 	Eigen::Vector3d odom_pos = Eigen::Vector3d(
 		odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
 	
-	Eigen::Vector3d new_pos;
+	Eigen::Vector3d odom_vel = Eigen::Vector3d(
+		odom.twist.twist.linear.x, odom.twist.twist.linear.y, odom.twist.twist.linear.z);
+
+	// Assuming mass is 1.0
+
+	// 0.5 * rho * vel^2 * Cd * crossA
+	// drag coefficient 1.0, 1.225kg/m3 density of air
+	double drag = 0.5 * 1.225 * pow(odom_vel.norm(),2) * 1.0 * 2.0;
 
 	Eigen::Vector3d _pos_error = sc.pos - odom_pos;
+
+	double desired_vel = _max_vel * _pos_error.norm();
 	
 	// Avoid nan errors due to small _pos_errors
 	Eigen::Vector3d _vector;
@@ -82,29 +91,49 @@ void quad_class::update_odom()
 
 	else
 		_vector = _pos_error / _pos_error.norm();
+	Eigen::Vector3d motion_vector;
+	if (odom_vel.norm() < 0.0000001)
+		motion_vector = Eigen::Vector3d(0,0,0);
 
-	Eigen::Vector3d pd_pos_error = _pos_error * _p_gain + (_pos_error / _simulation_interval) * _d_gain;
-	if ((pd_pos_error / _simulation_interval).norm() > _max_vel)
-		pd_pos_error = _vector * _max_vel * _simulation_interval;
+	else
+		motion_vector = odom_vel / odom_vel.norm();
 
-	new_pos = pd_pos_error + odom_pos;
+	Eigen::Vector3d _vel_error = desired_vel * _vector - odom_vel;
+	_accumulated_vel_error += _vel_error;
+	Eigen::Vector3d pid_vel_error = _vel_error * _p_gain + 
+		(_accumulated_vel_error * _simulation_interval) * _i_gain + 
+		(_vel_error / _simulation_interval) * _d_gain;
 
-	odom.pose.pose.position.x = new_pos[0];
-	odom.pose.pose.position.y = new_pos[1];
-	odom.pose.pose.position.z = new_pos[2];
+	// get the drag_vel through finding
+	// drag_acc which is the opposing force drag * -motion_vector
+	Eigen::Vector3d drag_acc = drag * -motion_vector;
+	Eigen::Vector3d drag_vel = odom_vel + drag_acc * _simulation_interval;
 
-	odom.pose.pose.orientation.w = sc.q.w();
-	odom.pose.pose.orientation.x = sc.q.x();
-	odom.pose.pose.orientation.y = sc.q.y();
-	odom.pose.pose.orientation.z = sc.q.z();
+	Eigen::Vector3d c_vel = odom_vel + drag_vel + pid_vel_error;
+	Eigen::Vector3d c_acc = (c_vel-odom_vel)/_simulation_interval;
 
-	odom.twist.twist.linear.x = sc.vel[0];
-	odom.twist.twist.linear.y = sc.vel[1];
-	odom.twist.twist.linear.z = sc.vel[2];
+	// Eigen::Vector3d c_acc = odom_acc + pid_acc_error - drag * _vector;
+	// Eigen::Vector3d c_vel = odom_vel + c_acc * _simulation_interval;	
+	Eigen::Vector3d c_pos = odom_pos + (c_vel + odom_vel) / 2 * _simulation_interval;
 
-	odom.twist.twist.angular.x = sc.acc[0];
-	odom.twist.twist.angular.y = sc.acc[1];
-	odom.twist.twist.angular.z = sc.acc[2];
+	Eigen::Quaterniond q = calc_uav_orientation(c_acc, last_yaw);
+	
+	odom.pose.pose.position.x = c_pos[0];
+	odom.pose.pose.position.y = c_pos[1];
+	odom.pose.pose.position.z = c_pos[2];
+
+	odom.pose.pose.orientation.w = q.w();
+	odom.pose.pose.orientation.x = q.x();
+	odom.pose.pose.orientation.y = q.y();
+	odom.pose.pose.orientation.z = q.z();
+
+	odom.twist.twist.linear.x = c_vel[0];
+	odom.twist.twist.linear.y = c_vel[1];
+	odom.twist.twist.linear.z = c_vel[2];
+
+	odom.twist.twist.angular.x = c_acc[0];
+	odom.twist.twist.angular.y = c_acc[1];
+	odom.twist.twist.angular.z = c_acc[2];
 }
 
 void quad_class::stop_and_hover()
