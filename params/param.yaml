@@ -1,0 +1,6 @@
+# Parameters
+state_pub_rate: 100
+max_vel: 3.5
+timeout: 1.0
+p_gain: 0.0005
+d_gain: 0.0005
