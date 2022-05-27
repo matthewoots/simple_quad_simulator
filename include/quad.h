@@ -5,13 +5,23 @@
 #include <random>
 #include <Eigen/Dense>
 #include <ros/ros.h>
+#include <random>
+
 #include <nav_msgs/Odometry.h>
+#include <nav_msgs/Path.h>
+
+#include <geometry_msgs/Point.h>
+#include <geometry_msgs/Quaternion.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/PointStamped.h>
+
 #include <mavros_msgs/PositionTarget.h>
 #include <mavros_msgs/State.h>
+
+#include <trajectory_msgs/JointTrajectory.h>
+#include <trajectory_msgs/JointTrajectoryPoint.h>
+
 #include <visualization_msgs/Marker.h>
-#include <geometry_msgs/PointStamped.h>
-#include <nav_msgs/Path.h>
 
 #include <tf/tf.h>
 
@@ -33,8 +43,9 @@ class quad_class
 {
     private:
     ros::NodeHandle _nh;
-    ros::Subscriber _pos_raw_sub;
-    ros::Publisher _odom_pub, _mesh_pub, _cmd_pub, _log_path_pub;
+    ros::Subscriber _pos_raw_sub, _log_traj_sub;
+    ros::Publisher _odom_pub;
+    ros::Publisher _mesh_pub, _cmd_pub, _log_path_pub, _log_traj_pub;
 
     ros::Timer _drone_timer;
 
@@ -53,6 +64,7 @@ class quad_class
 
     std::mutex command_mutex;
     std::mutex odometry_mutex;
+    std::mutex trajectory_mutex;
 
     visualization_msgs::Marker meshROS;
 
@@ -65,6 +77,8 @@ class quad_class
     */
     std::string mavros_custom_mode;
 
+    Eigen::Vector4d color_vect;
+
     public:
 
     struct state_command
@@ -73,11 +87,15 @@ class quad_class
         Eigen::Vector3d vel;
         Eigen::Vector3d acc;
         Eigen::Quaterniond q;
+        double t;
     };
 
     ros::Time command_time;
 
     quad_class::state_command sc;
+
+    vector<quad_class::state_command> traj_vector;
+    vector<Eigen::Vector3d> traj_pos_vector;
 
     nav_msgs::Odometry odom;
 
@@ -107,6 +125,8 @@ class quad_class
         /** @brief Subscriber that receives control raw setpoints via mavros */
 		_pos_raw_sub = _nh.subscribe<mavros_msgs::PositionTarget>(
 			"/" + _id + "/mavros/setpoint_raw/local", 20, &quad_class::command_callback, this);
+        _log_traj_sub = _nh.subscribe<trajectory_msgs::JointTrajectory>(
+            "/trajectory/points", 200, &quad_class::trajectory_callback, this);
 
 		/** @brief Publisher that publishes odometry data */
 		_odom_pub = _nh.advertise<nav_msgs::Odometry>(
@@ -121,6 +141,8 @@ class quad_class
             "/" + _id + "/uav/target", 10, true);
         _log_path_pub = _nh.advertise<nav_msgs::Path>(
             "/" + _id + "/uav/log_path", 10, true);
+        _log_traj_pub = _nh.advertise<visualization_msgs::Marker>(
+            "/" + _id + "/uav/log_trajectory", 10, true);
 
 
 		/** @brief Timer that handles drone state at each time frame */
@@ -152,6 +174,12 @@ class quad_class
         sc.acc = Eigen::Vector3d(0.0, 0.0, 0.0);
         sc.q = Eigen::Quaterniond(1.0, 0.0, 0.0, 0.0);
 
+        // Choose a color for the trajectory using random values
+        std::random_device dev;
+        std:mt19937 generator(dev());
+        std::uniform_real_distribution<double> dis(0.0, 1.0);
+        color_vect = Eigen::Vector4d(dis(generator), dis(generator), dis(generator), 0.5);
+
 		printf("%sdrone%d%s created! \n", KGRN, uav_id, KNRM);
         _drone_timer.start();
     }
@@ -165,16 +193,25 @@ class quad_class
 
     void drone_timer(const ros::TimerEvent &);
 
-    void command_callback(const mavros_msgs::PositionTarget::ConstPtr &msg);
-
     void update_odom();
 
     void stop_and_hover();
 
+    /** @brief callbacks */
+    void command_callback(const mavros_msgs::PositionTarget::ConstPtr &msg);
+    void trajectory_callback(const trajectory_msgs::JointTrajectory::ConstPtr &msg);
+
+    /** @brief visualization functions */
     void visualize_uav();
-
     void visualize_log_path();
+    void visualize_traj_path();
 
+    /** @brief common utility functions */
+    vector<quad_class::state_command> joint_trajectory_to_state(
+        trajectory_msgs::JointTrajectory jt);
     Eigen::Quaterniond calc_uav_orientation(
         Eigen::Vector3d acc, double yaw_rad);
+    void display_marker_list(
+        vector<Eigen::Vector3d> vect, double scale,
+        Eigen::Vector4d color, int id);
 };

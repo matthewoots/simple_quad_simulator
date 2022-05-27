@@ -10,7 +10,9 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   nav_msgs
   mavros_msgs
+  trajectory_msgs
 )
+
 find_package(Eigen3 REQUIRED)
 
 catkin_package(
@@ -18,6 +20,7 @@ catkin_package(
   roscpp
   nav_msgs
   mavros_msgs
+  trajectory_msgs
 
   DEPENDS
   Eigen3

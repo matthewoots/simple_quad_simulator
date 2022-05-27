@@ -22,6 +22,19 @@ void quad_class::command_callback(const mavros_msgs::PositionTarget::ConstPtr &m
 	_cmd_pub.publish(target);
 }
 
+void quad_class::trajectory_callback(const trajectory_msgs::JointTrajectory::ConstPtr &msg)
+{
+	std::lock_guard<std::mutex> traj_lock(trajectory_mutex);
+
+	trajectory_msgs::JointTrajectory copy_msg = *msg;
+	std::string traj_agent_id = copy_msg.joint_names[0];
+	if (traj_agent_id.compare(_id) != 0)
+		return;
+	traj_vector.clear();
+	traj_pos_vector.clear();
+	traj_vector = joint_trajectory_to_state(copy_msg);
+}
+
 bool quad_class::check_sent_command(double tolerance)
 {
 	// check_sent_command is true if command is within the tolerance
@@ -62,11 +75,13 @@ void quad_class::drone_timer(const ros::TimerEvent &)
 	/** @brief For visualization */
 	visualize_uav();
 	visualize_log_path();
+	visualize_traj_path();
 }
 
 void quad_class::update_odom()
 {
 	std::lock_guard<std::mutex> cmd_lock(command_mutex);
+	std::lock_guard<std::mutex> odom_lock(odometry_mutex);
 
 	odom.header.stamp = ros::Time::now();
 	odom.header.frame_id = "world";
@@ -81,7 +96,7 @@ void quad_class::update_odom()
 
 	// 0.5 * rho * vel^2 * Cd * crossA
 	// drag coefficient 1.0, 1.225kg/m3 density of air
-	double drag = 0.5 * 1.225 * pow(odom_vel.norm(),2) * 1.0 * 2.0;
+	double drag = 0.5 * 1.225 * pow(odom_vel.norm(),2) * 1.0 * 5.0;
 
 	Eigen::Vector3d _pos_error = sc.pos - odom_pos;
 
@@ -151,7 +166,10 @@ void quad_class::stop_and_hover()
 
 void quad_class::visualize_uav()
 {
+	std::lock_guard<std::mutex> odom_lock(odometry_mutex);
+
 	visualization_msgs::Marker meshROS;
+
 	// Mesh model
 	meshROS.header.frame_id = "world";
 	meshROS.header.stamp = odom.header.stamp;
@@ -159,31 +177,14 @@ void quad_class::visualize_uav()
 	meshROS.id = uav_id;
 	meshROS.type = visualization_msgs::Marker::MESH_RESOURCE;
 	meshROS.action = visualization_msgs::Marker::ADD;
-	meshROS.pose.position.x = odom.pose.pose.position.x;
-	meshROS.pose.position.y = odom.pose.pose.position.y;
-	meshROS.pose.position.z = odom.pose.pose.position.z;
-	Eigen::Quaterniond q;
-	q.w() = odom.pose.pose.orientation.w;
-	q.x() = odom.pose.pose.orientation.x;
-	q.y() = odom.pose.pose.orientation.y;
-	q.z() = odom.pose.pose.orientation.z;
-	// colvec ypr = R_to_ypr(quaternion_to_R(q));
-	// ypr(0) += rotate_yaw * PI / 180.0;
-	// q = R_to_quaternion(ypr_to_R(ypr));
-	// if (cross_config)
-	// {
-	// 	colvec ypr = R_to_ypr(quaternion_to_R(q));
-	// 	ypr(0) += 45.0 * PI / 180.0;
-	// 	q = R_to_quaternion(ypr_to_R(ypr));
-	// }
-	meshROS.pose.orientation.w = q.w();
-	meshROS.pose.orientation.x = q.x();
-	meshROS.pose.orientation.y = q.y();
-	meshROS.pose.orientation.z = q.z();
+
+	// Copy posestamped message
+	meshROS.pose = odom.pose.pose;
+
 	meshROS.scale.x = 0.4;
 	meshROS.scale.y = 0.4;
 	meshROS.scale.z = 0.4;
-	meshROS.color.a = 1.0;
+	meshROS.color.a = 0.7;
 	meshROS.color.r = 0.5;
 	meshROS.color.g = 0.5;
 	meshROS.color.b = 0.5;
@@ -212,16 +213,14 @@ Eigen::Quaterniond quad_class::calc_uav_orientation(
 
 void quad_class::visualize_log_path()
 {
+	std::lock_guard<std::mutex> odom_lock(odometry_mutex);
+
 	geometry_msgs::PoseStamped pose;
 	pose.header.stamp = ros::Time::now();
 	pose.header.frame_id = "world";
-	pose.pose.position.x = odom.pose.pose.position.x;
-	pose.pose.position.y = odom.pose.pose.position.y;
-	pose.pose.position.z = odom.pose.pose.position.z;
-	pose.pose.orientation.w = odom.pose.pose.orientation.w;
-	pose.pose.orientation.x = odom.pose.pose.orientation.x;
-	pose.pose.orientation.y = odom.pose.pose.orientation.y;
-	pose.pose.orientation.z = odom.pose.pose.orientation.z;
+
+	// Copy posestamped message
+	pose.pose = odom.pose.pose;
 
 	// Log the path on Rviz
 	// _simulation_interval/X = Time before we add another point to the vector
@@ -238,4 +237,78 @@ void quad_class::visualize_log_path()
 	{
 		path.poses.erase(path.poses.begin());
 	}
+}
+
+void quad_class::visualize_traj_path()
+{
+	std::lock_guard<std::mutex> traj_lock(trajectory_mutex);
+	display_marker_list(traj_pos_vector, 0.1, color_vect, uav_id);
+}
+
+vector<quad_class::state_command> quad_class::joint_trajectory_to_state(
+	trajectory_msgs::JointTrajectory jt)
+{
+	vector<quad_class::state_command> t_vect;
+	// Size of joint trajectory
+	int size_of_vector = (int)jt.points.size();
+	for (int i = 0; i < size_of_vector; i++)
+	{
+		quad_class::state_command s;
+		if (!jt.points[i].positions.empty())
+			s.pos = Eigen::Vector3d(jt.points[i].positions[0],
+					jt.points[i].positions[1], 
+					jt.points[i].positions[2]);
+		if (!jt.points[i].velocities.empty())
+			s.vel = Eigen::Vector3d(jt.points[i].velocities[0],
+					jt.points[i].velocities[1], 
+					jt.points[i].velocities[2]);
+		if (!jt.points[i].accelerations.empty())
+			s.acc = Eigen::Vector3d(jt.points[i].accelerations[0],
+					jt.points[i].accelerations[1], 
+					jt.points[i].accelerations[2]);
+		s.t = (jt.points[i].time_from_start).toSec();
+
+		t_vect.push_back(s);
+		traj_pos_vector.push_back(s.pos);
+	}
+
+	return t_vect;
+}
+
+void quad_class::display_marker_list(
+	vector<Eigen::Vector3d> vect, double scale,
+	Eigen::Vector4d color, int id)
+{
+	visualization_msgs::Marker sphere, line_strip;
+	sphere.header.frame_id = line_strip.header.frame_id = "world";
+	sphere.header.stamp = line_strip.header.stamp = ros::Time::now();
+	sphere.type = visualization_msgs::Marker::SPHERE_LIST;
+	line_strip.type = visualization_msgs::Marker::LINE_STRIP;
+	sphere.action = line_strip.action = visualization_msgs::Marker::ADD;
+
+	int max_point_id = id + 1000;
+	sphere.id = id;
+	line_strip.id = max_point_id;
+
+	sphere.pose.orientation.w = line_strip.pose.orientation.w = 1.0;
+	sphere.color.r = line_strip.color.r = color(0);
+	sphere.color.g = line_strip.color.g = color(1);
+	sphere.color.b = line_strip.color.b = color(2);
+	sphere.color.a = line_strip.color.a = color(3);
+	sphere.scale.x = scale;
+	sphere.scale.y = scale;
+	sphere.scale.z = scale;
+	line_strip.scale.x = scale / 2;
+	
+	for (int i = 0; i < (int)vect.size(); i++)
+	{
+		geometry_msgs::Point pt;
+		pt.x = vect[i](0);
+		pt.y = vect[i](1);
+		pt.z = vect[i](2);
+		sphere.points.push_back(pt);
+		line_strip.points.push_back(pt);
+	}
+	_log_traj_pub.publish(sphere);
+	_log_traj_pub.publish(line_strip);
 }
