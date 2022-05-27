@@ -58,7 +58,10 @@ void quad_class::drone_timer(const ros::TimerEvent &)
 	}
 
 	_odom_pub.publish(odom);
-	visualize();
+
+	/** @brief For visualization */
+	visualize_uav();
+	visualize_log_path();
 }
 
 void quad_class::update_odom()
@@ -146,7 +149,7 @@ void quad_class::stop_and_hover()
 	sc.q = calc_uav_orientation(sc.acc, yaw);
 }
 
-void quad_class::visualize()
+void quad_class::visualize_uav()
 {
 	visualization_msgs::Marker meshROS;
 	// Mesh model
@@ -205,4 +208,34 @@ Eigen::Quaterniond quad_class::calc_uav_orientation(
 
 	Eigen::Quaterniond q(R);
 	return q;
+}
+
+void quad_class::visualize_log_path()
+{
+	geometry_msgs::PoseStamped pose;
+	pose.header.stamp = ros::Time::now();
+	pose.header.frame_id = "world";
+	pose.pose.position.x = odom.pose.pose.position.x;
+	pose.pose.position.y = odom.pose.pose.position.y;
+	pose.pose.position.z = odom.pose.pose.position.z;
+	pose.pose.orientation.w = odom.pose.pose.orientation.w;
+	pose.pose.orientation.x = odom.pose.pose.orientation.x;
+	pose.pose.orientation.y = odom.pose.pose.orientation.y;
+	pose.pose.orientation.z = odom.pose.pose.orientation.z;
+
+	// Log the path on Rviz
+	// _simulation_interval/X = Time before we add another point to the vector
+	if ((pose.header.stamp - log_previous_time).toSec() > _simulation_interval/10)
+	{
+		path.header = pose.header;
+		path.poses.push_back(pose);
+		_log_path_pub.publish(path);
+	}
+
+	// We remove the size of the path after several instances
+	// _state_pub_rate * X = number of seconds before removing the front of the vector
+	if ((int)path.poses.size() > _state_pub_rate * 10)
+	{
+		path.poses.erase(path.poses.begin());
+	}
 }

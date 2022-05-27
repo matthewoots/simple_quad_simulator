@@ -11,6 +11,7 @@
 #include <mavros_msgs/State.h>
 #include <visualization_msgs/Marker.h>
 #include <geometry_msgs/PointStamped.h>
+#include <nav_msgs/Path.h>
 
 #include <tf/tf.h>
 
@@ -33,7 +34,7 @@ class quad_class
     private:
     ros::NodeHandle _nh;
     ros::Subscriber _pos_raw_sub;
-    ros::Publisher _odom_pub, _mesh_pub, _cmd_pub;
+    ros::Publisher _odom_pub, _mesh_pub, _cmd_pub, _log_path_pub;
 
     ros::Timer _drone_timer;
 
@@ -54,6 +55,9 @@ class quad_class
     std::mutex odometry_mutex;
 
     visualization_msgs::Marker meshROS;
+
+    ros::Time log_previous_time;
+    nav_msgs::Path path;
 
     /** @brief using http://wiki.ros.org/mavros/CustomModes
     * @param AUTO.MISSION
@@ -115,6 +119,8 @@ class quad_class
             "/" + _id + "/uav/mesh", 10, true);
         _cmd_pub = _nh.advertise<geometry_msgs::PointStamped>(
             "/" + _id + "/uav/target", 10, true);
+        _log_path_pub = _nh.advertise<nav_msgs::Path>(
+            "/" + _id + "/uav/log_path", 10, true);
 
 
 		/** @brief Timer that handles drone state at each time frame */
@@ -165,7 +171,9 @@ class quad_class
 
     void stop_and_hover();
 
-    void visualize();
+    void visualize_uav();
+
+    void visualize_log_path();
 
     Eigen::Quaterniond calc_uav_orientation(
         Eigen::Vector3d acc, double yaw_rad);
