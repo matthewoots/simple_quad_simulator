@@ -5,7 +5,7 @@ import math
 
 def main(argv):
 	num = int(argv[1])
-        fname = "../rviz/display_" + str(num) + ".rviz"
+        fname = "../rviz/generated_display_" + str(num) + ".rviz"
 
 	str_begin = "\n\
 Panels:\n\

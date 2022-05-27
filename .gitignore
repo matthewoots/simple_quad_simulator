@@ -39,3 +39,4 @@ cpp/build/*
 
 # vscode
 *.vscode
+generated_*
