@@ -4,11 +4,11 @@ import os
 import math
 
 # Format is
-# gen_launch.py 10 antipodal <radius>
-# gen_launch.py 10 horizontal-line <spacing>
-# gen_launch.py 10 vertical-line <spacing>
-# gen_launch.py 10 top-down-facing <spacing>
-# gen_launch.py 10 left-right-facing <spacing>
+# python gen_launch.py 10 antipodal <radius>
+# python gen_launch.py 10 horizontal-line <spacing>
+# python gen_launch.py 10 vertical-line <spacing>
+# python gen_launch.py 10 top-down-facing <space from center> <spacing>
+# python gen_launch.py 10 left-right-facing <space from center> <spacing>
 
 # Acceptable formations are 
 # 1. antipodal
@@ -20,11 +20,24 @@ import math
 def main(argv):
 	num = int(argv[1])
         _formation = str(argv[2])
+        height = 2.0
 
         if _formation == "antipodal":
-          height = 2.0
+          
           theta = np.linspace(-3.14159, 3.14159, num+1)
           r = int(argv[3])
+          
+        if _formation == "top-down-facing":
+          first_row = int(math.floor(num / 2))
+          second_row = num - first_row
+          first_row_offset = (first_row-1) * float(argv[4]) / 2
+          second_row_offset = (second_row-1) * float(argv[4]) / 2
+
+        if _formation == "left-right-facing":
+          first_row = int(math.floor(num / 2))
+          second_row = num - first_row
+          first_row_offset = (first_row-1) * float(argv[4]) / 2
+          second_row_offset = (second_row-1) * float(argv[4]) / 2
 
         fname = "../launch/generated_" + _formation + \
           "_" + str(num) + ".launch"
@@ -39,8 +52,27 @@ def main(argv):
 	file = open(fname, "w")
 	file.write(str_begin)
 	for i in range(0,num):
-            _start_x = r * math.sin(theta[i]) 
-            _start_y = r * math.cos(theta[i])
+            if _formation == "antipodal":
+              _start_x = r * math.sin(theta[i]) 
+              _start_y = r * math.cos(theta[i])
+            if _formation == "top-down-facing":
+              # second row down
+              if (i + 1) > first_row:
+                _start_x = - float(argv[3])
+                _start_y = float(argv[4])*(i-first_row) - second_row_offset
+              else:
+                _start_x = float(argv[3])
+                _start_y = float(argv[4])*(i) - first_row_offset
+
+            if _formation == "left-right-facing":
+              # second row right
+              if (i + 1) > first_row:
+                _start_x = float(argv[4])*(i-first_row) - second_row_offset
+                _start_y = - float(argv[3])
+              else:
+                _start_x = float(argv[4])*(i) - first_row_offset
+                _start_y = float(argv[3])
+
             agent = i
             print("written times {x}".format(x=agent))
             str_for_agent = "\n\

@@ -4,6 +4,8 @@ ROS-Rviz Quadcopter playground to test path planning and mapping algorithms (ROS
 | multiple drone formation | drone with given target | 
 | :---: | :---: |
 |![](media/sample1.png) | ![](media/sample2.png) | 
+| **left-right** | **top-down** | 
+|![](media/sample3.png) | ![](media/sample4.png) | 
 
 
 ### Setup
@@ -50,12 +52,12 @@ rosrun rviz rviz -d rviz/generated_display_<number-of-drones>.rviz
 2. Generate **launch file** for **formation** and **number of uavs**
 ```bash
 # Format is as such : 
-# gen_launch.py <number-of-drones> antipodal <radius>
-# gen_launch.py <number-of-drones> horizontal-line <spacing>
-# gen_launch.py <number-of-drones> vertical-line <spacing>
-# gen_launch.py <number-of-drones> top-down-facing <spacing>
-# gen_launch.py <number-of-drones> left-right-facing <spacing>
-# etc gen_launch.py 10 antipodal 12
+# python gen_launch.py <number-of-drones> antipodal <radius>
+# python gen_launch.py <number-of-drones> horizontal-line <spacing>
+# python gen_launch.py <number-of-drones> vertical-line <spacing>
+# python gen_launch.py <number-of-drones> top-down-facing <space from center> <spacing>
+# python gen_launch.py <number-of-drones> left-right-facing <space from center> <spacing>
+# etc python gen_launch.py 10 antipodal 12
 cd simple_quad_simulator/scripts
 python gen_launch.py <format>
 # The file will be generated in simple_quad_simulator/launch directory
