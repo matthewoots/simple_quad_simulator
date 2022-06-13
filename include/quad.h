@@ -54,13 +54,16 @@ class quad_class
     double _init_x, _init_y, _init_z;
 
     bool _received_cmd = false;
+    bool lerp_update;
     int uav_id;
+    int interval_div, interval_count;
     std::string _id, _mesh_resource;
-    double _simulation_interval, _state_pub_rate, _timeout, _yaw_offset, last_yaw;
-    double _max_vel;
-    double _p_gain, _i_gain, _d_gain;
+    double _simulation_interval, _command_interval, _state_pub_rate, _command_rate;
+    double _timeout, _yaw_offset, last_yaw;
     Eigen::Vector3d _start;
-    Eigen::Vector3d _accumulated_vel_error;
+
+    Eigen::Vector3d f_c_pos, f_c_vel, f_c_acc;
+    Eigen::Vector3d p_c_pos, p_c_vel, p_c_acc;
 
     std::mutex command_mutex;
     std::mutex odometry_mutex;
@@ -104,7 +107,8 @@ class quad_class
         _nh.param<std::string>("mesh_resource", _mesh_resource, "");
         _nh.param<std::string>("agent_id", _id, "drone0");
 		_nh.param<double>("state_pub_rate", _state_pub_rate, 1.0);
-        _nh.param<double>("max_vel", _max_vel, 1.0);
+        _nh.param<double>("command_rate", _command_rate, 1.0);
+
         _nh.param<double>("timeout", _timeout, 0.5);
 
         _nh.param<double>("start_x", _start(0), 0.0);
@@ -112,11 +116,8 @@ class quad_class
         _nh.param<double>("start_z", _start(2), 0.0);
         _nh.param<double>("yaw_offset", _yaw_offset, 0.0);
 
-        _nh.param<double>("p_gain", _p_gain, 1.0);
-        _nh.param<double>("i_gain", _i_gain, 1.0);
-        _nh.param<double>("d_gain", _d_gain, 1.0);
-
 		_simulation_interval = 1 / _state_pub_rate;
+        _command_interval = 1 / _command_rate;
 
 		std::string copy_id = _id; 
 		string uav_id_char = copy_id.erase(0,5); // removes first 5 character
@@ -155,6 +156,13 @@ class quad_class
         odom.pose.pose.position.x = _start(0);
 	    odom.pose.pose.position.y = _start(1);
 	    odom.pose.pose.position.z = _start(2);
+
+        p_c_pos = f_c_pos = _start;
+        p_c_vel = f_c_vel = Eigen::Vector3d::Zero();
+        p_c_acc = f_c_acc = Eigen::Vector3d::Zero();
+
+        interval_div = (int)floor(_simulation_interval / _command_interval);
+        interval_count = interval_div;
 
 	    odom.pose.pose.orientation.w = 1.0;
 	    odom.pose.pose.orientation.x = 0.0;

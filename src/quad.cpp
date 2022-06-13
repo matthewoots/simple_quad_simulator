@@ -20,6 +20,8 @@ void quad_class::command_callback(const mavros_msgs::PositionTarget::ConstPtr &m
 	target.point.y = sc.pos[1];
 	target.point.z = sc.pos[2];
 	_cmd_pub.publish(target);
+
+	lerp_update = true;
 }
 
 void quad_class::trajectory_callback(const trajectory_msgs::JointTrajectory::ConstPtr &msg)
@@ -86,53 +88,58 @@ void quad_class::update_odom()
 	odom.header.stamp = ros::Time::now();
 	odom.header.frame_id = "world";
 
-	Eigen::Vector3d odom_pos = Eigen::Vector3d(
-		odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
+	if (lerp_update)
+	{
+		p_c_pos = Eigen::Vector3d(
+			odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
+		
+		p_c_vel = Eigen::Vector3d(
+			odom.twist.twist.linear.x, odom.twist.twist.linear.y, odom.twist.twist.linear.z);
+		
+		p_c_acc = Eigen::Vector3d(
+			odom.twist.twist.angular.x, odom.twist.twist.angular.y, odom.twist.twist.angular.z);
 	
-	Eigen::Vector3d odom_vel = Eigen::Vector3d(
-		odom.twist.twist.linear.x, odom.twist.twist.linear.y, odom.twist.twist.linear.z);
+		// Assuming mass is 1.0
 
-	// Assuming mass is 1.0
+		// 0.5 * rho * vel^2 * Cd * crossA
+		// drag coefficient 1.0, 1.225kg/m3 density of air
+		// double drag = 0.5 * 1.225 * pow(odom_vel.norm(),2) * 1.0 * 5.0;
 
-	// 0.5 * rho * vel^2 * Cd * crossA
-	// drag coefficient 1.0, 1.225kg/m3 density of air
-	double drag = 0.5 * 1.225 * pow(odom_vel.norm(),2) * 1.0 * 5.0;
-
-	Eigen::Vector3d _pos_error = sc.pos - odom_pos;
-
-	double desired_vel = _max_vel * _pos_error.norm();
+		Eigen::Vector3d _pos_error = sc.pos - p_c_pos;
+		f_c_vel = - p_c_vel + (2 * _pos_error) / _command_interval;
+		f_c_acc = (f_c_vel - p_c_vel) / _command_interval;
+		f_c_pos = p_c_pos + _pos_error;
+	
+		lerp_update = false;
+		interval_count = 0;
+	}
 	
 	// Avoid nan errors due to small _pos_errors
-	Eigen::Vector3d _vector;
-	if (_pos_error.norm() < 0.0000001)
-		_vector = Eigen::Vector3d(0,0,0);
+	// Eigen::Vector3d _vector;
+	// if (_pos_error.norm() < 0.0000001)
+	// 	_vector = Eigen::Vector3d(0,0,0);
 
-	else
-		_vector = _pos_error / _pos_error.norm();
-	Eigen::Vector3d motion_vector;
-	if (odom_vel.norm() < 0.0000001)
-		motion_vector = Eigen::Vector3d(0,0,0);
+	// else
+	// 	_vector = _pos_error / _pos_error.norm();
+		
+	// Eigen::Vector3d motion_vector;
+	// if (odom_vel.norm() < 0.0000001)
+	// 	motion_vector = Eigen::Vector3d(0,0,0);
 
-	else
-		motion_vector = odom_vel / odom_vel.norm();
-
-	Eigen::Vector3d _vel_error = desired_vel * _vector - odom_vel;
-	_accumulated_vel_error += _vel_error;
-	Eigen::Vector3d pid_vel_error = _vel_error * _p_gain + 
-		(_accumulated_vel_error * _simulation_interval) * _i_gain + 
-		(_vel_error / _simulation_interval) * _d_gain;
+	// else
+	// 	motion_vector = odom_vel / odom_vel.norm();
 
 	// get the drag_vel through finding
 	// drag_acc which is the opposing force drag * -motion_vector
-	Eigen::Vector3d drag_acc = drag * -motion_vector;
-	Eigen::Vector3d drag_vel = odom_vel + drag_acc * _simulation_interval;
+	// Eigen::Vector3d drag_acc = drag * -motion_vector;
+	// Eigen::Vector3d drag_vel = odom_vel + drag_acc * _simulation_interval;
 
-	Eigen::Vector3d c_vel = odom_vel + drag_vel + pid_vel_error;
-	Eigen::Vector3d c_acc = (c_vel-odom_vel)/_simulation_interval;
+	if (interval_count <= interval_div)
+		interval_count++;
 
-	// Eigen::Vector3d c_acc = odom_acc + pid_acc_error - drag * _vector;
-	// Eigen::Vector3d c_vel = odom_vel + c_acc * _simulation_interval;	
-	Eigen::Vector3d c_pos = odom_pos + (c_vel + odom_vel) / 2 * _simulation_interval;
+	Eigen::Vector3d c_acc = p_c_acc + (f_c_acc - p_c_acc) * interval_count;	
+	Eigen::Vector3d c_vel = p_c_vel + (f_c_vel - p_c_vel) * interval_count;	
+	Eigen::Vector3d c_pos = p_c_pos + (f_c_pos - p_c_pos) * interval_count;
 
 	Eigen::Quaterniond q = calc_uav_orientation(c_acc, last_yaw);
 	
