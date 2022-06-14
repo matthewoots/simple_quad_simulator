@@ -21,6 +21,14 @@ void quad_class::command_callback(const mavros_msgs::PositionTarget::ConstPtr &m
 	target.point.z = sc.pos[2];
 	_cmd_pub.publish(target);
 
+	odom.twist.twist.linear.x = 0.0;
+	odom.twist.twist.linear.y = 0.0;
+	odom.twist.twist.linear.z = 0.0;
+
+	odom.twist.twist.angular.x = 0.0;
+	odom.twist.twist.angular.y = 0.0;
+	odom.twist.twist.angular.z = 0.0;
+
 	lerp_update = true;
 }
 
@@ -35,6 +43,22 @@ void quad_class::trajectory_callback(const trajectory_msgs::JointTrajectory::Con
 	traj_vector.clear();
 	traj_pos_vector.clear();
 	traj_vector = joint_trajectory_to_state(copy_msg);
+}
+
+void quad_class::pcl2_callback(const sensor_msgs::PointCloud2ConstPtr& msg)
+{	
+	pcl::PointCloud<pcl::PointXYZ>::Ptr full_cloud = pcl2_converter(*msg);
+
+	Eigen::Vector3d pose = Eigen::Vector3d(
+		odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
+    Eigen::Vector3d sensing_map_size = Eigen::Vector3d(
+		_sensing_range*2, _sensing_range*2, _sensing_range*2);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr local_cloud = pcl_ptr_box_crop(
+		full_cloud, pose, sensing_map_size);
+	
+	sensor_msgs::PointCloud2 cloud_msg;
+    pcl::toROSMsg(*local_cloud, cloud_msg);
+    _local_pcl_pub.publish(cloud_msg);
 }
 
 bool quad_class::check_sent_command(double tolerance)
@@ -73,6 +97,20 @@ void quad_class::drone_timer(const ros::TimerEvent &)
 	}
 
 	_odom_pub.publish(odom);
+
+	sensor_msgs::JointState js;
+	js.header.stamp = ros::Time::now();
+	js.name.push_back(uav_id_char);
+	js.position.push_back(odom.pose.pose.position.x);
+	js.position.push_back(odom.pose.pose.position.y);
+	js.position.push_back(odom.pose.pose.position.z);
+
+	js.effort.push_back(odom.pose.pose.orientation.w);
+	js.effort.push_back(odom.pose.pose.orientation.x);
+	js.effort.push_back(odom.pose.pose.orientation.y);
+	js.effort.push_back(odom.pose.pose.orientation.z);
+
+	_agent_pub.publish(js);
 
 	/** @brief For visualization */
 	visualize_uav();
@@ -240,7 +278,7 @@ void quad_class::visualize_log_path()
 
 	// We remove the size of the path after several instances
 	// _state_pub_rate * X = number of seconds before removing the front of the vector
-	if ((int)path.poses.size() > _state_pub_rate * 10)
+	if ((int)path.poses.size() > _state_pub_rate * 20)
 	{
 		path.poses.erase(path.poses.begin());
 	}

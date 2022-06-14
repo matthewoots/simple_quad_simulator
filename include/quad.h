@@ -23,6 +23,15 @@
 
 #include <visualization_msgs/Marker.h>
 
+#include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/point_cloud_conversion.h>
+#include <sensor_msgs/JointState.h>
+
+#include <pcl_ros/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/conversions.h>
+#include <pcl/filters/crop_box.h>
+
 #include <tf/tf.h>
 
 #define KNRM  "\033[0m"
@@ -43,8 +52,8 @@ class quad_class
 {
     private:
     ros::NodeHandle _nh;
-    ros::Subscriber _pos_raw_sub, _log_traj_sub;
-    ros::Publisher _odom_pub;
+    ros::Subscriber _pos_raw_sub, _log_traj_sub, _full_pcl_sub;
+    ros::Publisher _odom_pub, _local_pcl_pub, _agent_pub;
     ros::Publisher _mesh_pub, _cmd_pub, _log_path_pub, _log_traj_pub;
 
     ros::Timer _drone_timer;
@@ -52,12 +61,13 @@ class quad_class
     mavros_msgs::PositionTarget _cmd;
 
     double _init_x, _init_y, _init_z;
+    double _sensing_range;
 
     bool _received_cmd = false;
     bool lerp_update;
     int uav_id;
     int interval_div, interval_count;
-    std::string _id, _mesh_resource;
+    std::string _id, _mesh_resource, uav_id_char;
     double _simulation_interval, _command_interval, _state_pub_rate, _command_rate;
     double _timeout, _yaw_offset, last_yaw;
     Eigen::Vector3d _start;
@@ -108,6 +118,7 @@ class quad_class
         _nh.param<std::string>("agent_id", _id, "drone0");
 		_nh.param<double>("state_pub_rate", _state_pub_rate, 1.0);
         _nh.param<double>("command_rate", _command_rate, 1.0);
+        _nh.param<double>("sensing_range", _sensing_range, 1.0);
 
         _nh.param<double>("timeout", _timeout, 0.5);
 
@@ -120,7 +131,7 @@ class quad_class
         _command_interval = 1 / _command_rate;
 
 		std::string copy_id = _id; 
-		string uav_id_char = copy_id.erase(0,5); // removes first 5 character
+	    uav_id_char = copy_id.erase(0,5); // removes first 5 character
 		uav_id = stoi(uav_id_char);
 
         /** @brief Subscriber that receives control raw setpoints via mavros */
@@ -128,10 +139,19 @@ class quad_class
 			"/" + _id + "/mavros/setpoint_raw/local", 20, &quad_class::command_callback, this);
         _log_traj_sub = _nh.subscribe<trajectory_msgs::JointTrajectory>(
             "/trajectory/points", 200, &quad_class::trajectory_callback, this);
+        /** @brief Subscriber that receives full pointcloud */
+        _full_pcl_sub = _nh.subscribe<sensor_msgs::PointCloud2>(
+            "/cloud", 20,  &quad_class::pcl2_callback, this);
+
 
 		/** @brief Publisher that publishes odometry data */
 		_odom_pub = _nh.advertise<nav_msgs::Odometry>(
 			"/" + _id + "/mavros/odom_nwu", 10);
+        /** @brief Publisher that publishes common state data for tracker */
+		_agent_pub = _nh.advertise<sensor_msgs::JointState>("/agent/pose", 10);
+        /** @brief Publisher that publishes local pointcloud */
+        _local_pcl_pub = _nh.advertise<sensor_msgs::PointCloud2>(
+            "/" + _id + "/local_pcl", 20);
 
         
         /** @brief For visualization */
@@ -208,6 +228,7 @@ class quad_class
     /** @brief callbacks */
     void command_callback(const mavros_msgs::PositionTarget::ConstPtr &msg);
     void trajectory_callback(const trajectory_msgs::JointTrajectory::ConstPtr &msg);
+    void pcl2_callback(const sensor_msgs::PointCloud2ConstPtr& msg);
 
     /** @brief visualization functions */
     void visualize_uav();
@@ -222,4 +243,39 @@ class quad_class
     void display_marker_list(
         vector<Eigen::Vector3d> vect, double scale,
         Eigen::Vector4d color, int id);
+
+    /** @brief Convert point cloud from ROS sensor message to pcl point ptr **/
+    pcl::PointCloud<pcl::PointXYZ>::Ptr 
+        pcl2_converter(sensor_msgs::PointCloud2 _pc)
+    {
+        pcl::PCLPointCloud2 pcl_pc2;
+        pcl_conversions::toPCL(_pc, pcl_pc2);
+
+        pcl::PointCloud<pcl::PointXYZ>::Ptr tmp_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+        
+        pcl::fromPCLPointCloud2(pcl_pc2, *tmp_cloud);
+        
+        return tmp_cloud;
+    }
+
+    /** @brief Filter/Crop point cloud with the dimensions given */
+    inline pcl::PointCloud<pcl::PointXYZ>::Ptr pcl_ptr_box_crop(
+        pcl::PointCloud<pcl::PointXYZ>::Ptr _pc, 
+        Eigen::Vector3d centroid, Eigen::Vector3d dimension)
+    {   
+        pcl::PointCloud<pcl::PointXYZ>::Ptr output(
+            new pcl::PointCloud<pcl::PointXYZ>);
+
+        Eigen::Vector3d min = centroid - (dimension / 2);
+        Eigen::Vector3d max = centroid + (dimension / 2);
+
+        pcl::CropBox<pcl::PointXYZ> box_filter;
+        box_filter.setMin(Eigen::Vector4f(min.x(), min.y(), min.z(), 1.0));
+        box_filter.setMax(Eigen::Vector4f(max.x(), max.y(), max.z(), 1.0));
+
+        box_filter.setInputCloud(_pc);
+        box_filter.filter(*output);
+
+        return output;
+    }
 };

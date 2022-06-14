@@ -83,6 +83,7 @@ def main(argv):
         <rosparam command=\"load\" file=\"$(find quad)/params/param.yaml\" />\n\
         <param name=\"mesh_resource\" value=\"file://$(find quad)/meshes/fake_drone.dae\" />\n\
         <param name=\"agent_id\" value=\"$(arg id)\"/>\n\
+        <param name=\"sensing_range\" value=\"4\"/>\n\
         <param name=\"command_rate\" value=\"$(arg command_hz)\"/>\n\
         <param name=\"start_x\" value=\"{start_x}\"/>\n\
         <param name=\"start_y\" value=\"{start_y}\"/>\n\

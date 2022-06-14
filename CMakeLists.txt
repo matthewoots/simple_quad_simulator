@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
   mavros_msgs
   trajectory_msgs
+  pcl_ros
 )
 
 find_package(Eigen3 REQUIRED)
@@ -21,6 +22,7 @@ catkin_package(
   nav_msgs
   mavros_msgs
   trajectory_msgs
+  pcl_ros
 
   DEPENDS
   Eigen3

@@ -8,6 +8,7 @@
         <rosparam command="load" file="$(find quad)/params/param.yaml" />
         <param name="mesh_resource" value="file://$(find quad)/meshes/fake_drone.dae" />
         <param name="agent_id" value="$(arg id)"/>
+        <param name="sensing_range" value="4"/>
         <param name="command_rate" value="$(arg command_hz)"/>
         <param name="start_x" value="0.0"/>
         <param name="start_y" value="0.0"/>
