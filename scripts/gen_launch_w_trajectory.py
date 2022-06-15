@@ -20,7 +20,7 @@ import math
 def main(argv):
 	num = int(argv[1])
         _formation = str(argv[2])
-        height = 2.0
+        height = 1.5
 
         if _formation == "antipodal":
           
@@ -111,6 +111,13 @@ def main(argv):
         <param name=\"zbuffer\" value=\"1.0\"/>\n\
         <param name=\"passage_size\" value=\"10.0\"/>\n\
         <rosparam param=\"height\">[1.0, 3.0]</rosparam>\n\
+        <!-- Optimization parameters -->\n\
+        <param name=\"weight_smooth\" value=\"5.0\"/>\n\
+        <param name=\"weight_feas\" value=\"5.0\"/>\n\
+        <param name=\"weight_term\" value=\"0.1\"/>\n\
+        <param name=\"weight_static\" value=\"2.5\"/>\n\
+        <param name=\"weight_reci\" value=\"7.0\"/>\n\
+        <param name=\"max_acc\" value=\"0.3\"/>\n\
     </node>\n\
 </group>\n\
     \n".format(drone_ns=agent, \
