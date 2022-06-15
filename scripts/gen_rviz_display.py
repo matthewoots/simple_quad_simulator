@@ -16,7 +16,7 @@ Panels:\n\
       Expanded:\n\
         - /Global Options1\n\
       Splitter Ratio: 0.45588234066963196\n\
-    Tree Height: 726\n\
+    Tree Height: 755\n\
   - Class: rviz/Selection\n\
     Name: Selection\n\
   - Class: rviz/Tool Properties\n\
@@ -35,7 +35,7 @@ Panels:\n\
     Experimental: false\n\
     Name: Time\n\
     SyncMode: 0\n\
-    SyncSource: \"\"\n\
+    SyncSource: \"global_map\"\n\
 Preferences:\n\
   PromptSaveOnExit: true\n\
 Toolbars:\n\
@@ -242,12 +242,73 @@ Window Geometry:\n\
             {{}}\n\
           Queue Size: 100\n\
           Value: true\n\
+        - Alpha: 1\n\
+          Autocompute Intensity Bounds: true\n\
+          Autocompute Value Bounds:\n\
+            Max Value: 10\n\
+            Min Value: -10\n\
+            Value: true\n\
+          Axis: Z\n\
+          Channel Name: intensity\n\
+          Class: rviz/PointCloud2\n\
+          Color: 204; 0; 0\n\
+          Color Transformer: FlatColor\n\
+          Decay Time: 0\n\
+          Enabled: true\n\
+          Invert Rainbow: false\n\
+          Max Color: 255; 255; 255\n\
+          Min Color: 0; 0; 0\n\
+          Name: local_map\n\
+          Position Transformer: XYZ\n\
+          Queue Size: 10\n\
+          Selectable: true\n\
+          Size (Pixels): 4\n\
+          Size (m): 0.009999999776482582\n\
+          Style: Points\n\
+          Topic: /drone{drone_id_pcl}/local_pcl\n\
+          Unreliable: false\n\
+          Use Fixed Frame: true\n\
+          Use rainbow: true\n\
+          Value: true\n\
       Enabled: true\n\
-      Name: drone{drone_id}\n".format(drone_id_mesh=agent, \
+      Name: drone{drone_id}\n\
+    - Class: rviz/Group\n\
+      Displays:\n\
+        - Alpha: 1\n\
+          Autocompute Intensity Bounds: true\n\
+          Autocompute Value Bounds:\n\
+            Max Value: 10\n\
+            Min Value: -10\n\
+            Value: true\n\
+          Axis: Z\n\
+          Channel Name: intensity\n\
+          Class: rviz/PointCloud2\n\
+          Color: 32; 74; 135\n\
+          Color Transformer: FlatColor\n\
+          Decay Time: 0\n\
+          Enabled: true\n\
+          Invert Rainbow: false\n\
+          Max Color: 255; 255; 255\n\
+          Min Color: 0; 0; 0\n\
+          Name: global_map\n\
+          Position Transformer: XYZ\n\
+          Queue Size: 10\n\
+          Selectable: true\n\
+          Size (Pixels): 3\n\
+          Size (m): 0.009999999776482582\n\
+          Style: Points\n\
+          Topic: /cloud\n\
+          Unreliable: false\n\
+          Use Fixed Frame: true\n\
+          Use rainbow: true\n\
+          Value: true\n\
+      Enabled: true\n\
+      Name: environment\n".format(drone_id_mesh=agent, \
           drone_id_odom=agent, \
           drone_id_target=agent, \
           drone_id_log_path=agent, \
           drone_id_trajectory=agent, \
+          drone_id_pcl=agent, \
           drone_id=agent)
             file.write(str_for_agent)
         
