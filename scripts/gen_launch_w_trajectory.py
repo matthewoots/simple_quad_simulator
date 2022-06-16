@@ -98,8 +98,8 @@ def main(argv):
         <param name=\"cmd_update_hz\" value=\"$(arg command_hz)\"/>\n\
         <!-- Bspline parameters -->\n\
         <param name=\"traj_duration_secs\" value=\"8.0\"/>\n\
-        <param name=\"order\" value=\"4\"/>\n\
-        <param name=\"des_knot_div\" value=\"5\"/>\n\
+        <param name=\"order\" value=\"3\"/>\n\
+        <param name=\"des_knot_div\" value=\"3\"/>\n\
         <param name=\"max_velocity\" value=\"2.0\"/>\n\
         <!-- RRT parameters -->\n\
         <param name=\"runtime_error\" value=\"0.12\"/>\n\
@@ -107,17 +107,17 @@ def main(argv):
         <param name=\"search_radius\" value=\"7.0\"/>\n\
         <param name=\"threshold\" value=\"0.3\"/>\n\
         <param name=\"search_interval\" value=\"7.0\"/>\n\
-        <param name=\"xybuffer\" value=\"1.0\"/>\n\
-        <param name=\"zbuffer\" value=\"1.0\"/>\n\
-        <param name=\"passage_size\" value=\"10.0\"/>\n\
+        <param name=\"xybuffer\" value=\"2.5\"/>\n\
+        <param name=\"zbuffer\" value=\"1.5\"/>\n\
+        <param name=\"passage_size\" value=\"9.0\"/>\n\
         <rosparam param=\"height\">[1.0, 3.0]</rosparam>\n\
         <!-- Optimization parameters -->\n\
-        <param name=\"weight_smooth\" value=\"5.0\"/>\n\
-        <param name=\"weight_feas\" value=\"5.0\"/>\n\
+        <param name=\"weight_smooth\" value=\"1.0\"/>\n\
+        <param name=\"weight_feas\" value=\"2.0\"/>\n\
         <param name=\"weight_term\" value=\"0.1\"/>\n\
-        <param name=\"weight_static\" value=\"2.5\"/>\n\
-        <param name=\"weight_reci\" value=\"7.0\"/>\n\
-        <param name=\"max_acc\" value=\"0.3\"/>\n\
+        <param name=\"weight_static\" value=\"4.0\"/>\n\
+        <param name=\"weight_reci\" value=\"5.0\"/>\n\
+        <param name=\"max_acc\" value=\"0.4\"/>\n\
     </node>\n\
 </group>\n\
     \n".format(drone_ns=agent, \
