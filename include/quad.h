@@ -112,6 +112,8 @@ class quad_class
 
     nav_msgs::Odometry odom;
 
+    nav_msgs::Odometry previous_odom;
+
 	quad_class(ros::NodeHandle &nodeHandle) : _nh(nodeHandle)
 	{
         _nh.param<std::string>("mesh_resource", _mesh_resource, "");
@@ -177,11 +179,15 @@ class quad_class
 	    odom.pose.pose.position.y = _start(1);
 	    odom.pose.pose.position.z = _start(2);
 
+        previous_odom.pose.pose.position.x = _start(0);
+	    previous_odom.pose.pose.position.y = _start(1);
+	    previous_odom.pose.pose.position.z = _start(2);
+
         p_c_pos = f_c_pos = _start;
         p_c_vel = f_c_vel = Eigen::Vector3d::Zero();
         p_c_acc = f_c_acc = Eigen::Vector3d::Zero();
 
-        interval_div = (int)floor(_simulation_interval / _command_interval);
+        interval_div = max(1,(int)round(_state_pub_rate / _command_rate));
         interval_count = interval_div;
 
 	    odom.pose.pose.orientation.w = 1.0;

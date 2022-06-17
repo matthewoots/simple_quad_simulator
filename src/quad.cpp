@@ -105,12 +105,29 @@ void quad_class::drone_timer(const ros::TimerEvent &)
 	js.position.push_back(odom.pose.pose.position.y);
 	js.position.push_back(odom.pose.pose.position.z);
 
+	js.velocity.push_back((
+		odom.pose.pose.position.x - previous_odom.pose.pose.position.x) / _simulation_interval); 
+	js.velocity.push_back((
+		odom.pose.pose.position.y - previous_odom.pose.pose.position.y) / _simulation_interval);
+	js.velocity.push_back((
+		odom.pose.pose.position.z - previous_odom.pose.pose.position.z) / _simulation_interval);
+
+	// std::cout << "[quad] " << KGRN << (odom.pose.pose.position.x - previous_odom.pose.pose.position.x) <<
+    //     " " << (odom.pose.pose.position.y - previous_odom.pose.pose.position.y) << " " << 
+	// 	(odom.pose.pose.position.z - previous_odom.pose.pose.position.z) << KNRM << std::endl;
+
+	// js.velocity.push_back(odom.twist.twist.linear.x);
+	// js.velocity.push_back(odom.twist.twist.linear.y);
+	// js.velocity.push_back(odom.twist.twist.linear.z);
+
 	js.effort.push_back(odom.pose.pose.orientation.w);
 	js.effort.push_back(odom.pose.pose.orientation.x);
 	js.effort.push_back(odom.pose.pose.orientation.y);
 	js.effort.push_back(odom.pose.pose.orientation.z);
 
 	_agent_pub.publish(js);
+
+	previous_odom = odom;
 
 	/** @brief For visualization */
 	visualize_uav();
@@ -127,7 +144,7 @@ void quad_class::update_odom()
 	odom.header.frame_id = "world";
 
 	if (lerp_update)
-	{
+	{	
 		p_c_pos = Eigen::Vector3d(
 			odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
 		
@@ -136,7 +153,6 @@ void quad_class::update_odom()
 		
 		p_c_acc = Eigen::Vector3d(
 			odom.twist.twist.angular.x, odom.twist.twist.angular.y, odom.twist.twist.angular.z);
-	
 		// Assuming mass is 1.0
 
 		// 0.5 * rho * vel^2 * Cd * crossA
@@ -175,9 +191,10 @@ void quad_class::update_odom()
 	if (interval_count <= interval_div)
 		interval_count++;
 
-	Eigen::Vector3d c_acc = p_c_acc + (f_c_acc - p_c_acc) * interval_count;	
-	Eigen::Vector3d c_vel = p_c_vel + (f_c_vel - p_c_vel) * interval_count;	
-	Eigen::Vector3d c_pos = p_c_pos + (f_c_pos - p_c_pos) * interval_count;
+	Eigen::Vector3d c_acc = f_c_acc;
+	// Eigen::Vector3d c_acc = p_c_acc + (f_c_acc - p_c_acc) / interval_div * interval_count;	
+	Eigen::Vector3d c_vel = p_c_vel + (f_c_vel - p_c_vel) / interval_div * interval_count;	
+	Eigen::Vector3d c_pos = p_c_pos + (f_c_pos - p_c_pos) / interval_div * interval_count;
 
 	Eigen::Quaterniond q = calc_uav_orientation(c_acc, last_yaw);
 	
