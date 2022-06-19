@@ -105,19 +105,18 @@ def main(argv):
         <param name=\"runtime_error\" value=\"0.12\"/>\n\
         <param name=\"sub_runtime_error\" value=\"0.025\"/>\n\
         <param name=\"search_radius\" value=\"7.0\"/>\n\
-        <param name=\"threshold\" value=\"0.3\"/>\n\
+        <param name=\"threshold\" value=\"0.35\"/>\n\
         <param name=\"search_interval\" value=\"7.0\"/>\n\
         <param name=\"xybuffer\" value=\"2.5\"/>\n\
         <param name=\"zbuffer\" value=\"1.5\"/>\n\
         <param name=\"passage_size\" value=\"9.0\"/>\n\
         <rosparam param=\"height\">[1.0, 3.0]</rosparam>\n\
         <!-- Optimization parameters -->\n\
-        <param name=\"weight_smooth\" value=\"1.0\"/>\n\
-        <param name=\"weight_feas\" value=\"2.0\"/>\n\
-        <param name=\"weight_term\" value=\"0.1\"/>\n\
-        <param name=\"weight_static\" value=\"4.0\"/>\n\
-        <param name=\"weight_reci\" value=\"5.0\"/>\n\
-        <param name=\"max_acc\" value=\"0.4\"/>\n\
+        <param name=\"weight_smooth\" value=\"1.5\"/>\n\
+        <param name=\"weight_feas\" value=\"2.5\"/>\n\
+        <param name=\"weight_static\" value=\"1.2\"/>\n\
+        <param name=\"weight_reci\" value=\"5.4\"/>\n\
+        <param name=\"max_acc\" value=\"0.3\"/>\n\
     </node>\n\
 </group>\n\
     \n".format(drone_ns=agent, \
