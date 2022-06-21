@@ -5,8 +5,8 @@ import math
 
 # Format is
 # python gen_launch.py 10 antipodal <radius>
-# python gen_launch.py 10 horizontal-line <spacing>
-# python gen_launch.py 10 vertical-line <spacing>
+# python gen_launch.py 10 horizontal-line <space from center> <spacing>
+# python gen_launch.py 10 vertical-line <space from center> <spacing>
 # python gen_launch.py 10 top-down-facing <space from center> <spacing>
 # python gen_launch.py 10 left-right-facing <space from center> <spacing>
 
