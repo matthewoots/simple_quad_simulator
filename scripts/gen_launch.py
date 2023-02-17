@@ -42,11 +42,21 @@ def main(argv):
         fname = "../launch/generated_" + _formation + \
           "_" + str(num) + ".launch"
 
-	str_begin = "<?xml version=\"1.0\"?>\n\
-<launch>\n"
+	str_begin = "\
+<?xml version=\"1.0\"?>\n\
+<launch>\n\
+  <arg name=\"map_path\" value=\"$(find quad)/data/sample.pcd\" />"
 
-	str_end = "\n\
-  </launch>\n"
+	str_end = "\
+  \n\
+  <node pkg=\"quad\" type=\"map_publisher\" name=\"map_publisher\" output=\"screen\">\n\
+      <param name=\"map/path\" value=\"$(arg map_path)\"/>\n\
+  </node>\n\
+  \n\
+  <node name=\"rviz\" pkg=\"rviz\" type=\"rviz\" \n\
+      args=\"-d $(find quad)/rviz/generated_display_{drone_count}.rviz\"/> \n\
+  \n\
+</launch>".format(drone_count=num)
 
 	print("number of agents : {x}".format(x=num))
 	file = open(fname, "w")
@@ -76,22 +86,22 @@ def main(argv):
             agent = i
             print("written times {x}".format(x=agent))
             str_for_agent = "\n\
-<group ns=\"drone{drone_ns}\">\n\
-    <arg name=\"id\" value=\"drone{drone_id}\"/>\n\
-    <arg name=\"command_hz\" value=\"10\"/>\n\
-    <node pkg=\"quad\" type=\"quad_node\" name=\"quad_node\" output=\"screen\">\n\
-        <rosparam command=\"load\" file=\"$(find quad)/params/param.yaml\" />\n\
-        <param name=\"mesh_resource\" value=\"file://$(find quad)/meshes/fake_drone.dae\" />\n\
-        <param name=\"agent_id\" value=\"$(arg id)\"/>\n\
-        <param name=\"sensing_range\" value=\"4\"/>\n\
-        <param name=\"command_rate\" value=\"$(arg command_hz)\"/>\n\
-        <param name=\"start_x\" value=\"{start_x}\"/>\n\
-        <param name=\"start_y\" value=\"{start_y}\"/>\n\
-        <param name=\"start_z\" value=\"{start_z}\"/>\n\
-        <param name=\"yaw_offset\" value=\"{yaw_offset}\"/>\n\
-    </node>\n\
-</group>\n\
-    \n".format(drone_ns=agent, \
+  \n\
+  <group ns=\"drone{drone_ns}\">\n\
+      <arg name=\"id\" value=\"drone{drone_id}\"/>\n\
+      <node pkg=\"quad\" type=\"quad_node\" name=\"quad_node\" output=\"screen\">\n\
+          <rosparam command=\"load\" file=\"$(find quad)/launch/simulation_parameters.yaml\" />\n\
+          <rosparam command=\"load\" file=\"$(find quad)/launch/map_parameters.yaml\" />\n\
+          <param name=\"agent/mesh_resource\" value=\"file://$(find quad)/meshes/fake_drone.dae\" />\n\
+          <param name=\"agent/id\" value=\"$(arg id)\"/>\n\
+          <param name=\"agent/start_x\" value=\"{start_x}\"/>\n\
+          <param name=\"agent/start_y\" value=\"{start_y}\"/>\n\
+          <param name=\"agent/start_z\" value=\"{start_z}\"/>\n\
+          <param name=\"agent/yaw_offset\" value=\"{yaw_offset}\"/>\n\
+          <param name=\"map/path\" value=\"$(arg map_path)\"/>\n\
+      </node>\n\
+  </group>\n\
+    ".format(drone_ns=agent, \
           drone_id=agent, \
           start_x=_start_x, \
           start_y=_start_y, \

@@ -1,0 +1,6 @@
+# simulation parameters
+agent:
+  state_pub_rate: 100
+  command_pub_rate: 10
+  sensing_range: 10.0
+  timeout: 1.0

@@ -45,21 +45,21 @@ void quad_class::trajectory_callback(const trajectory_msgs::JointTrajectory::Con
 	traj_vector = joint_trajectory_to_state(copy_msg);
 }
 
-void quad_class::pcl2_callback(const sensor_msgs::PointCloud2ConstPtr& msg)
-{	
-	pcl::PointCloud<pcl::PointXYZ>::Ptr full_cloud = pcl2_converter(*msg);
+// void quad_class::pcl2_callback(const sensor_msgs::PointCloud2ConstPtr& msg)
+// {	
+// 	pcl::PointCloud<pcl::PointXYZ>::Ptr full_cloud = pcl2_converter(*msg);
 
-	Eigen::Vector3d pose = Eigen::Vector3d(
-		odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
-    Eigen::Vector3d sensing_map_size = Eigen::Vector3d(
-		_sensing_range*2, _sensing_range*2, _sensing_range*2);
-	pcl::PointCloud<pcl::PointXYZ>::Ptr local_cloud = pcl_ptr_box_crop(
-		full_cloud, pose, sensing_map_size);
+// 	Eigen::Vector3d pose = Eigen::Vector3d(
+// 		odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
+//     Eigen::Vector3d sensing_map_size = Eigen::Vector3d(
+// 		_sensing_range*2, _sensing_range*2, _sensing_range*2);
+// 	pcl::PointCloud<pcl::PointXYZ>::Ptr local_cloud = pcl_ptr_box_crop(
+// 		full_cloud, pose, sensing_map_size);
 	
-	sensor_msgs::PointCloud2 cloud_msg;
-    pcl::toROSMsg(*local_cloud, cloud_msg);
-    _local_pcl_pub.publish(cloud_msg);
-}
+// 	sensor_msgs::PointCloud2 cloud_msg;
+//     pcl::toROSMsg(*local_cloud, cloud_msg);
+//     _local_pcl_pub.publish(cloud_msg);
+// }
 
 bool quad_class::check_sent_command(double tolerance)
 {
@@ -135,10 +135,23 @@ void quad_class::drone_timer(const ros::TimerEvent &)
 	visualize_traj_path();
 }
 
+void quad_class::map_timer(const ros::TimerEvent &)
+{
+	// ros::Time start = ros::Time::now();
+
+	odometry_mutex.lock();
+	nav_msgs::Odometry odom_copy = odom;
+	odometry_mutex.unlock();
+
+	render_sensed_points(odom_copy);
+	
+	// printf("[quad] %sdrone%d%s mapping time %.3lfms\n", 
+	// 	KGRN, uav_id, KNRM, (ros::Time::now() - start).toSec() * 1000);
+}
+
 void quad_class::update_odom()
 {
 	std::lock_guard<std::mutex> cmd_lock(command_mutex);
-	std::lock_guard<std::mutex> odom_lock(odometry_mutex);
 
 	odom.header.stamp = ros::Time::now();
 	odom.header.frame_id = "world";
@@ -198,6 +211,7 @@ void quad_class::update_odom()
 
 	Eigen::Quaterniond q = calc_uav_orientation(c_acc, last_yaw);
 	
+	odometry_mutex.lock();
 	odom.pose.pose.position.x = c_pos[0];
 	odom.pose.pose.position.y = c_pos[1];
 	odom.pose.pose.position.z = c_pos[2];
@@ -214,6 +228,7 @@ void quad_class::update_odom()
 	odom.twist.twist.angular.x = c_acc[0];
 	odom.twist.twist.angular.y = c_acc[1];
 	odom.twist.twist.angular.z = c_acc[2];
+	odometry_mutex.unlock();
 }
 
 void quad_class::stop_and_hover()
@@ -307,10 +322,10 @@ void quad_class::visualize_traj_path()
 	display_marker_list(traj_pos_vector, 0.1, color_vect, uav_id);
 }
 
-vector<quad_class::state_command> quad_class::joint_trajectory_to_state(
+std::vector<quad_class::state_command> quad_class::joint_trajectory_to_state(
 	trajectory_msgs::JointTrajectory jt)
 {
-	vector<quad_class::state_command> t_vect;
+	std::vector<quad_class::state_command> t_vect;
 	// Size of joint trajectory
 	int size_of_vector = (int)jt.points.size();
 	for (int i = 0; i < size_of_vector; i++)
@@ -338,7 +353,7 @@ vector<quad_class::state_command> quad_class::joint_trajectory_to_state(
 }
 
 void quad_class::display_marker_list(
-	vector<Eigen::Vector3d> vect, double scale,
+	std::vector<Eigen::Vector3d> vect, double scale,
 	Eigen::Vector4d color, int id)
 {
 	visualization_msgs::Marker sphere, line_strip;

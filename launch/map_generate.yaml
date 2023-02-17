@@ -1,0 +1,19 @@
+polar_obs: 10
+circle_obs: 10
+map:
+  resolution: 0.1
+  min_distance: 2.0
+  x_size: 20.0
+  y_size: 20.0
+  z_size: 5.0
+
+obstacle:
+  lower_rad: 0.2
+  upper_rad: 0.7
+  lower_height: 3.0
+  upper_height: 7.0
+  radius_l: 7.0
+  radius_h: 7.0
+  z_l: 7.0 
+  z_h: 7.0
+  theta: 7.0

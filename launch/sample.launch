@@ -1,20 +1,27 @@
 <?xml version="1.0"?>
 <launch>
-<group ns="drone0">
+    <arg name="map_path" value="$(find quad)/data/sample.pcd" />
 
-    <arg name="id" value="drone0"/>
-    <arg name="command_hz" value="10"/>
-    <node pkg="quad" type="quad_node" name="quad_node" output="screen">
-        <rosparam command="load" file="$(find quad)/params/param.yaml" />
-        <param name="mesh_resource" value="file://$(find quad)/meshes/fake_drone.dae" />
-        <param name="agent_id" value="$(arg id)"/>
-        <param name="sensing_range" value="4"/>
-        <param name="command_rate" value="$(arg command_hz)"/>
-        <param name="start_x" value="0.0"/>
-        <param name="start_y" value="0.0"/>
-        <param name="start_z" value="2.0"/>
-        <param name="yaw_offset" value="0.0"/>
+    <group ns="drone0">
+        <arg name="id" value="drone0"/>
+        <node pkg="quad" type="quad_node" name="quad_node" output="screen">
+            <rosparam command="load" file="$(find quad)/launch/simulation_parameters.yaml" />
+            <rosparam command="load" file="$(find quad)/launch/map_parameters.yaml" />
+            <param name="agent/mesh_resource" value="file://$(find quad)/meshes/fake_drone.dae" />
+            <param name="agent/id" value="$(arg id)"/>
+            <param name="agent/start_x" value="0.0"/>
+            <param name="agent/start_y" value="0.0"/>
+            <param name="agent/start_z" value="2.0"/>
+            <param name="agent/yaw_offset" value="0.0"/>
+            <param name="map/path" value="$(arg map_path)"/>
+        </node>
+    </group>
+
+    <node pkg="quad" type="map_publisher" name="map_publisher" output="screen">
+        <param name="map/path" value="$(arg map_path)"/>
     </node>
 
-</group>
+    <node name="rviz" pkg="rviz" type="rviz" 
+        args="-d $(find quad)/rviz/display.rviz"/>
+
 </launch>
