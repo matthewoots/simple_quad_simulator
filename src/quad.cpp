@@ -29,7 +29,7 @@ void quad_class::command_callback(const mavros_msgs::PositionTarget::ConstPtr &m
 	odom.twist.twist.angular.y = 0.0;
 	odom.twist.twist.angular.z = 0.0;
 
-	lerp_update = true;
+	received_target = true;
 }
 
 void quad_class::trajectory_callback(const trajectory_msgs::JointTrajectory::ConstPtr &msg)
@@ -96,7 +96,18 @@ void quad_class::drone_timer(const ros::TimerEvent &)
 		update_odom();
 	}
 
+	geometry_msgs::PoseStamped pose_msg;
+	pose_msg.header.stamp = ros::Time::now();
+	pose_msg.header.frame_id = "world";
+	pose_msg.pose = odom.pose.pose;
+
 	_odom_pub.publish(odom);
+
+	if ((ros::Time::now() - last_pose_time).toSec() > (1/_pose_pub_rate))
+	{
+		_pose_pub.publish(pose_msg);
+		last_pose_time = ros::Time::now();
+	}
 
 	sensor_msgs::JointState js;
 	js.header.stamp = ros::Time::now();
@@ -156,7 +167,7 @@ void quad_class::update_odom()
 	odom.header.stamp = ros::Time::now();
 	odom.header.frame_id = "world";
 
-	if (lerp_update)
+	if (received_target)
 	{	
 		p_c_pos = Eigen::Vector3d(
 			odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
@@ -166,48 +177,22 @@ void quad_class::update_odom()
 		
 		p_c_acc = Eigen::Vector3d(
 			odom.twist.twist.angular.x, odom.twist.twist.angular.y, odom.twist.twist.angular.z);
+		
 		// Assuming mass is 1.0
-
 		// 0.5 * rho * vel^2 * Cd * crossA
 		// drag coefficient 1.0, 1.225kg/m3 density of air
 		// double drag = 0.5 * 1.225 * pow(odom_vel.norm(),2) * 1.0 * 5.0;
 
-		Eigen::Vector3d _pos_error = sc.pos - p_c_pos;
-		f_c_vel = - p_c_vel + (2 * _pos_error) / _command_interval;
-		f_c_acc = (f_c_vel - p_c_vel) / _command_interval;
-		f_c_pos = p_c_pos + _pos_error;
+		f_c_vel = sc.vel;
+		f_c_acc = sc.acc;
+		f_c_pos = sc.pos;
 	
-		lerp_update = false;
-		interval_count = 0;
+		received_target = false;
 	}
-	
-	// Avoid nan errors due to small _pos_errors
-	// Eigen::Vector3d _vector;
-	// if (_pos_error.norm() < 0.0000001)
-	// 	_vector = Eigen::Vector3d(0,0,0);
-
-	// else
-	// 	_vector = _pos_error / _pos_error.norm();
-		
-	// Eigen::Vector3d motion_vector;
-	// if (odom_vel.norm() < 0.0000001)
-	// 	motion_vector = Eigen::Vector3d(0,0,0);
-
-	// else
-	// 	motion_vector = odom_vel / odom_vel.norm();
-
-	// get the drag_vel through finding
-	// drag_acc which is the opposing force drag * -motion_vector
-	// Eigen::Vector3d drag_acc = drag * -motion_vector;
-	// Eigen::Vector3d drag_vel = odom_vel + drag_acc * _simulation_interval;
-
-	if (interval_count <= interval_div)
-		interval_count++;
 
 	Eigen::Vector3d c_acc = f_c_acc;
-	// Eigen::Vector3d c_acc = p_c_acc + (f_c_acc - p_c_acc) / interval_div * interval_count;	
-	Eigen::Vector3d c_vel = p_c_vel + (f_c_vel - p_c_vel) / interval_div * interval_count;	
-	Eigen::Vector3d c_pos = p_c_pos + (f_c_pos - p_c_pos) / interval_div * interval_count;
+	Eigen::Vector3d c_vel = f_c_vel;
+	Eigen::Vector3d c_pos = f_c_pos;
 
 	Eigen::Quaterniond q = calc_uav_orientation(c_acc, last_yaw);
 	
@@ -309,8 +294,8 @@ void quad_class::visualize_log_path()
 	}
 
 	// We remove the size of the path after several instances
-	// _state_pub_rate * X = number of seconds before removing the front of the vector
-	if ((int)path.poses.size() > _state_pub_rate * 20)
+	// _simulation_rate * X = number of seconds before removing the front of the vector
+	if ((int)path.poses.size() > _simulation_rate * 20)
 	{
 		path.poses.erase(path.poses.begin());
 	}

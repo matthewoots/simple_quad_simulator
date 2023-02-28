@@ -57,7 +57,7 @@ class quad_class
         ros::Subscriber _log_traj_sub; 
         ros::Subscriber _full_pcl_sub;
 
-        ros::Publisher _odom_pub, _local_pcl_pub, _agent_pub;
+        ros::Publisher _odom_pub, _local_pcl_pub, _agent_pub, _pose_pub;
         ros::Publisher _mesh_pub, _cmd_pub, _log_path_pub, _log_traj_pub;
 
         ros::Timer _drone_timer;
@@ -72,10 +72,8 @@ class quad_class
         double _half_vtc_resolution_and_half_range;
         double _half_hrz_range = M_PI;
 
-        bool _received_cmd = false;
-        bool lerp_update;
+        bool received_target;
         int uav_id;
-        int interval_div, interval_count;
         std::string _id; 
         std::string _mesh_resource;
         std::string uav_id_char;
@@ -83,7 +81,8 @@ class quad_class
         double _simulation_interval;
         double _command_interval; 
         double _map_interval;
-        double _state_pub_rate; 
+        double _simulation_rate; 
+        double _pose_pub_rate;
         double _command_pub_rate;
         double _map_pub_rate;
         double _timeout, _yaw_offset, last_yaw;
@@ -107,6 +106,7 @@ class quad_class
         visualization_msgs::Marker meshROS;
 
         ros::Time log_previous_time;
+        ros::Time last_pose_time;
         nav_msgs::Path path;
 
         /** @brief using http://wiki.ros.org/mavros/CustomModes
@@ -144,7 +144,9 @@ class quad_class
         {
             _nh.param<std::string>("agent/mesh_resource", _mesh_resource, "");
             _nh.param<std::string>("agent/id", _id, "");
-            _nh.param<double>("agent/state_pub_rate", _state_pub_rate, -1.0);
+            _nh.param<double>("agent/simulation_rate", _simulation_rate, -1.0);
+            _nh.param<double>("agent/pose_pub_rate", _pose_pub_rate, -1.0);
+            
             _nh.param<double>("agent/command_rate", _command_pub_rate, -1.0);
             _nh.param<double>("agent/sensing_range", _sensing_range, -1.0);
             _nh.param<double>("agent/timeout", _timeout, -1.0);
@@ -172,7 +174,7 @@ class quad_class
             idx_map = Eigen::MatrixXi::Constant(_hrz_laser_line_num, _vtc_laser_line_num, -1);
             dis_map = Eigen::MatrixXd::Constant(_hrz_laser_line_num, _vtc_laser_line_num, 9999.0);
 
-            _simulation_interval = 1 / _state_pub_rate;
+            _simulation_interval = 1 / _simulation_rate;
             _command_interval = 1 / _command_pub_rate;
             _map_interval = 1 / _map_pub_rate;
 
@@ -183,8 +185,8 @@ class quad_class
             /** @brief Subscriber that receives control raw setpoints via mavros */
             _pos_raw_sub = _nh.subscribe<mavros_msgs::PositionTarget>(
                 "/" + _id + "/mavros/setpoint_raw/local", 5, &quad_class::command_callback, this);
-            _log_traj_sub = _nh.subscribe<trajectory_msgs::JointTrajectory>(
-                "/trajectory/points", 10, &quad_class::trajectory_callback, this);
+            // _log_traj_sub = _nh.subscribe<trajectory_msgs::JointTrajectory>(
+            //     "/trajectory/points", 10, &quad_class::trajectory_callback, this);
             /** @brief Subscriber that receives full pointcloud */
             // _full_pcl_sub = _nh.subscribe<sensor_msgs::PointCloud2>(
             //     "/ext/cloud", 10,  &quad_class::pcl2_callback, this);
@@ -192,6 +194,9 @@ class quad_class
             /** @brief Publisher that publishes odometry data */
             _odom_pub = _nh.advertise<nav_msgs::Odometry>(
                 "/" + _id + "/mavros/odom_nwu", 10);
+            /** @brief Publisher that publishes pose data */
+            _pose_pub = _nh.advertise<geometry_msgs::PoseStamped>(
+                "/" + _id + "/uav/nwu", 10);
             /** @brief Publisher that publishes common state data for tracker */
             _agent_pub = _nh.advertise<sensor_msgs::JointState>("/agent/pose", 10);
             /** @brief Publisher that publishes local pointcloud */
@@ -233,9 +238,6 @@ class quad_class
             p_c_vel = f_c_vel = Eigen::Vector3d::Zero();
             p_c_acc = f_c_acc = Eigen::Vector3d::Zero();
 
-            interval_div = std::max(1,(int)std::round(_state_pub_rate / _command_pub_rate));
-            interval_count = interval_div;
-
             odom.pose.pose.orientation.w = 1.0;
             odom.pose.pose.orientation.x = 0.0;
             odom.pose.pose.orientation.y = 0.0;
@@ -272,6 +274,8 @@ class quad_class
 
             printf("[quad] %sdrone%d%s created! \n", KGRN, uav_id, KNRM);
             
+            last_pose_time = ros::Time::now();
+
             _drone_timer.start();
 
             _map_timer.start();

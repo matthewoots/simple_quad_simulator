@@ -1,5 +1,5 @@
-polar_obs: 10
-circle_obs: 10
+polar_obs: 20
+circle_obs: 20
 map:
   resolution: 0.1
   min_distance: 2.0
