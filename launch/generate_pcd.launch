@@ -1,7 +1,0 @@
-<?xml version="1.0"?>
-<launch>
-    <node pkg="quad" type="map_generation" name="map_generation" output="screen">
-        <rosparam command="load" file="$(find quad)/launch/map_generate.yaml" />
-        <param name="path" value="$(find quad)/data/"/>
-    </node>
-</launch>

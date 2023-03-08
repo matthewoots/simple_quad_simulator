@@ -1,5 +1,10 @@
+if (NOT $ENV{ROS_DISTRO} STREQUAL "noetic")
+  message("ros2 detected")
+  return()
+endif()
+
 cmake_minimum_required(VERSION 3.8)
-project(quad)
+project(px4sim1)
 
 # Default to C++17
 if(NOT CMAKE_CXX_STANDARD)
@@ -33,23 +38,24 @@ catkin_package(
 
 include_directories(
   include
+  ../external
   ${catkin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIR}
   ${PCL_INCLUDE_DIRS}
 )
 
-add_executable (${PROJECT_NAME}_node 
+add_executable (px4_quad_node 
   src/main.cpp
   src/quad.cpp
-  external/zju_laser_sim.cpp
+  ../external/laser_simulator/zju_laser_sim.cpp
 )
-target_link_libraries(${PROJECT_NAME}_node 
+target_link_libraries(px4_quad_node
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
 )
 
 add_executable (map_generation
-  external/zju_random_forest.cpp
+  ../external/zju_random_forest.cpp
 )
 target_link_libraries(map_generation
   ${catkin_LIBRARIES}

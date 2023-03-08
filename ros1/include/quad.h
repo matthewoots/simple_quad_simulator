@@ -8,9 +8,7 @@
 
 #include <pcl/point_types.h>
 #include <pcl/conversions.h>
-#include <pcl/filters/crop_box.h>
 #include <pcl/io/pcd_io.h>
-#include <pcl/kdtree/kdtree_flann.h>
 
 #include <ros/ros.h>
 
@@ -38,6 +36,8 @@
 
 #include <tf/tf.h>
 
+#include <laser_simulator/zju_laser_sim.h>
+
 #define KNRM  "\033[0m"
 #define KRED  "\033[31m"
 #define KGRN  "\033[32m"
@@ -50,6 +50,16 @@
 class quad_class
 {
     private:
+
+        struct state
+        {
+            double t;
+            Eigen::Vector3d pos;
+            Eigen::Vector3d vel;
+            Eigen::Vector3d acc;
+            Eigen::Quaterniond q;
+            double yaw;
+        };
 
         ros::NodeHandle _nh;
 
@@ -65,45 +75,36 @@ class quad_class
 
         mavros_msgs::PositionTarget _cmd;
 
-        double _init_x, _init_y, _init_z;
-        double _sensing_range, _resolution;
-        int _hrz_laser_line_num, _vtc_laser_line_num;
-        double _hrz_resolution_rad, _vtc_resolution_rad, _vtc_laser_range_rad;
-        double _half_vtc_resolution_and_half_range;
-        double _half_hrz_range = M_PI;
-
-        bool received_target;
+        
+        
         int uav_id;
+        
         std::string _id; 
         std::string _mesh_resource;
         std::string uav_id_char;
         std::string _map_path;
+
+        double _init_x;
+        double _init_y;
+        double _init_z;
         double _simulation_interval;
-        double _command_interval; 
-        double _map_interval;
         double _simulation_rate; 
-        double _pose_pub_rate;
-        double _command_pub_rate;
+        double _map_interval;
         double _map_pub_rate;
-        double _timeout, _yaw_offset, last_yaw;
+        double _pose_pub_rate;
+        double _timeout;
+        double _yaw_offset;
         Eigen::Vector3d _start;
 
+        quad_class::state _previous, _desired, _current;
         Eigen::Vector3d f_c_pos, f_c_vel, f_c_acc;
         Eigen::Vector3d p_c_pos, p_c_vel, p_c_acc;
 
-        pcl::PointCloud<pcl::PointXYZ> global_map;
-        pcl::PointCloud<pcl::PointXYZ> local_map;
-        pcl::KdTreeFLANN<pcl::PointXYZ> kdtree_local_map;
-        std::vector<int> point_idx_radius_search;
-        std::vector<float> point_radius_squared_distance;
-        Eigen::MatrixXi idx_map;
-        Eigen::MatrixXd dis_map;
+        pcl::PointCloud<pcl::PointXYZ> _global_map;  
 
         std::mutex command_mutex;
         std::mutex odometry_mutex;
         std::mutex trajectory_mutex;
-
-        visualization_msgs::Marker meshROS;
 
         ros::Time log_previous_time;
         ros::Time last_pose_time;
@@ -117,37 +118,34 @@ class quad_class
 
         Eigen::Vector4d color_vect;
 
+        laser::laser_simulator _laser;
+
     public:
 
-        struct state_command
-        {
-            Eigen::Vector3d pos;
-            Eigen::Vector3d vel;
-            Eigen::Vector3d acc;
-            Eigen::Quaterniond q;
-            double t;
-        };
+        
 
         ros::Time command_time;
 
-        quad_class::state_command sc;
-
-        std::vector<quad_class::state_command> traj_vector;
+        std::vector<quad_class::state> traj_vector;
 
         std::vector<Eigen::Vector3d> traj_pos_vector;
 
         nav_msgs::Odometry odom;
 
-        nav_msgs::Odometry previous_odom;
-
         quad_class(ros::NodeHandle &nodeHandle) : _nh(nodeHandle)
         {
+            int _hrz_laser_line_num;
+            int _vtc_laser_line_num;
+            double _resolution;
+            double _sensing_range;
+            double _hrz_laser_range_dgr;
+            double _vtc_laser_range_dgr;
+
             _nh.param<std::string>("agent/mesh_resource", _mesh_resource, "");
             _nh.param<std::string>("agent/id", _id, "");
             _nh.param<double>("agent/simulation_rate", _simulation_rate, -1.0);
             _nh.param<double>("agent/pose_pub_rate", _pose_pub_rate, -1.0);
             
-            _nh.param<double>("agent/command_rate", _command_pub_rate, -1.0);
             _nh.param<double>("agent/sensing_range", _sensing_range, -1.0);
             _nh.param<double>("agent/timeout", _timeout, -1.0);
             _nh.param<double>("agent/start_x", _start(0), 0.0);
@@ -160,22 +158,10 @@ class quad_class
             _nh.param<double>("map/resolution", _resolution, 0.0);
             _nh.param<int>("map/horizontal/laser_line_num", _hrz_laser_line_num, 0);
             _nh.param<int>("map/vertical/laser_line_num", _vtc_laser_line_num, 0);
-            double hrz_laser_range_dgr, vtc_laser_range_dgr;
-            _nh.param<double>("map/horizontal/laser_range_dgr", hrz_laser_range_dgr, 0.0);
-            _nh.param<double>("map/vertical/laser_range_dgr", vtc_laser_range_dgr, 0.0);
-
-            _vtc_laser_range_rad = vtc_laser_range_dgr / 180.0 * M_PI;
-            _vtc_resolution_rad = _vtc_laser_range_rad / (double)(_vtc_laser_line_num - 1);
-            _half_vtc_resolution_and_half_range = (_vtc_laser_range_rad + _vtc_resolution_rad) / 2.0;
-
-            _half_hrz_range = hrz_laser_range_dgr / 180.0 * M_PI / 2.0;
-            _hrz_resolution_rad = 2 * M_PI / (double)_hrz_laser_line_num;
-
-            idx_map = Eigen::MatrixXi::Constant(_hrz_laser_line_num, _vtc_laser_line_num, -1);
-            dis_map = Eigen::MatrixXd::Constant(_hrz_laser_line_num, _vtc_laser_line_num, 9999.0);
+            _nh.param<double>("map/horizontal/laser_range_dgr", _hrz_laser_range_dgr, 0.0);
+            _nh.param<double>("map/vertical/laser_range_dgr", _vtc_laser_range_dgr, 0.0);
 
             _simulation_interval = 1 / _simulation_rate;
-            _command_interval = 1 / _command_pub_rate;
             _map_interval = 1 / _map_pub_rate;
 
             std::string copy_id = _id; 
@@ -185,11 +171,6 @@ class quad_class
             /** @brief Subscriber that receives control raw setpoints via mavros */
             _pos_raw_sub = _nh.subscribe<mavros_msgs::PositionTarget>(
                 "/" + _id + "/mavros/setpoint_raw/local", 5, &quad_class::command_callback, this);
-            // _log_traj_sub = _nh.subscribe<trajectory_msgs::JointTrajectory>(
-            //     "/trajectory/points", 10, &quad_class::trajectory_callback, this);
-            /** @brief Subscriber that receives full pointcloud */
-            // _full_pcl_sub = _nh.subscribe<sensor_msgs::PointCloud2>(
-            //     "/ext/cloud", 10,  &quad_class::pcl2_callback, this);
 
             /** @brief Publisher that publishes odometry data */
             _odom_pub = _nh.advertise<nav_msgs::Odometry>(
@@ -203,7 +184,6 @@ class quad_class
             _local_pcl_pub = _nh.advertise<sensor_msgs::PointCloud2>(
                 "/" + _id + "/map", 10);
 
-            /** @brief For visualization */
             /** @brief Publisher that publishes rviz_visualization data */    
             _mesh_pub = _nh.advertise<visualization_msgs::Marker>(
                 "/" + _id + "/uav/mesh", 10, true);
@@ -230,10 +210,6 @@ class quad_class
             odom.pose.pose.position.y = _start(1);
             odom.pose.pose.position.z = _start(2);
 
-            previous_odom.pose.pose.position.x = _start(0);
-            previous_odom.pose.pose.position.y = _start(1);
-            previous_odom.pose.pose.position.z = _start(2);
-
             p_c_pos = f_c_pos = _start;
             p_c_vel = f_c_vel = Eigen::Vector3d::Zero();
             p_c_acc = f_c_acc = Eigen::Vector3d::Zero();
@@ -251,10 +227,10 @@ class quad_class
             odom.twist.twist.angular.y = 0.0;
             odom.twist.twist.angular.z = 0.0;
 
-            sc.pos = Eigen::Vector3d(_start(0), _start(1), _start(2));
-            sc.vel = Eigen::Vector3d(0.0, 0.0, 0.0);
-            sc.acc = Eigen::Vector3d(0.0, 0.0, 0.0);
-            sc.q = Eigen::Quaterniond(1.0, 0.0, 0.0, 0.0);
+            _desired.pos = Eigen::Vector3d(_start(0), _start(1), _start(2));
+            _desired.vel = Eigen::Vector3d(0.0, 0.0, 0.0);
+            _desired.acc = Eigen::Vector3d(0.0, 0.0, 0.0);
+            _desired.q = Eigen::Quaterniond(1.0, 0.0, 0.0, 0.0);
 
             // Choose a color for the trajectory using random values
             std::random_device dev;
@@ -265,12 +241,19 @@ class quad_class
             printf("[quad] %sdrone%d%s pcd path: %s\n", KGRN, uav_id, KNRM, _map_path.c_str());
             // try to load the file
             if (pcl::io::loadPCDFile<pcl::PointXYZ>(
-                _map_path, global_map) == -1) 
+                _map_path, _global_map) == -1) 
             {
                 printf("[quad] %sdrone%d%s no valid pcd used!\n", KRED, uav_id, KNRM);
             }
 
-            kdtree_local_map.setInputCloud(global_map.makeShared());
+            _laser.set_parameters(
+                _resolution,
+                _sensing_range,
+                _global_map,
+                _vtc_laser_range_dgr,
+                _hrz_laser_range_dgr,
+                _vtc_laser_line_num,
+                _hrz_laser_line_num);
 
             printf("[quad] %sdrone%d%s created! \n", KGRN, uav_id, KNRM);
             
@@ -287,7 +270,7 @@ class quad_class
             
             _map_timer.stop();
             
-            global_map.points.clear();
+            _global_map.points.clear();
         }
 
         bool check_sent_command(double tolerance);
@@ -300,20 +283,6 @@ class quad_class
 
         void stop_and_hover();
 
-        void render_sensed_points(
-            nav_msgs::Odometry &_odom);
-
-        inline void idx_to_pt(int x, int y, double dis, Eigen::Vector3d &pt);
-
-        inline bool pt_to_idx(Eigen::Vector2i &idx,
-            const Eigen::Vector3d &pt,
-            const Eigen::Vector3d &laser_t, 
-            const Eigen::Matrix3d &laser_R);
-
-        inline double line_intersect_plane(Eigen::Vector3d &intersection,
-            const Eigen::Vector3d &line_p, const Eigen::Vector3d &line_dir,
-            const Eigen::Vector3d &plane_p, const Eigen::Vector3d &plane_normal);
-
         /** @brief callbacks */
         void command_callback(const mavros_msgs::PositionTarget::ConstPtr &msg);
         void trajectory_callback(const trajectory_msgs::JointTrajectory::ConstPtr &msg);
@@ -325,7 +294,7 @@ class quad_class
         void visualize_traj_path();
 
         /** @brief common utility functions */
-        std::vector<quad_class::state_command> joint_trajectory_to_state(
+        std::vector<quad_class::state> joint_trajectory_to_state(
             trajectory_msgs::JointTrajectory jt);
 
         Eigen::Quaterniond calc_uav_orientation(
@@ -335,38 +304,7 @@ class quad_class
             std::vector<Eigen::Vector3d> vect, double scale,
             Eigen::Vector4d color, int id);
 
-        /** @brief Convert point cloud from ROS sensor message to pcl point ptr **/
-        // pcl::PointCloud<pcl::PointXYZ>::Ptr 
-        //     pcl2_converter(sensor_msgs::PointCloud2 _pc)
-        // {
-        //     pcl::PCLPointCloud2 pcl_pc2;
-        //     pcl_conversions::toPCL(_pc, pcl_pc2);
+        geometry_msgs::PoseStamped eigen_to_posestamped(
+            Eigen::Vector3d pos, Eigen::Quaterniond quat);
 
-        //     pcl::PointCloud<pcl::PointXYZ>::Ptr tmp_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-            
-        //     pcl::fromPCLPointCloud2(pcl_pc2, *tmp_cloud);
-            
-        //     return tmp_cloud;
-        // }
-
-        /** @brief Filter/Crop point cloud with the dimensions given */
-        // inline pcl::PointCloud<pcl::PointXYZ>::Ptr pcl_ptr_box_crop(
-        //     pcl::PointCloud<pcl::PointXYZ>::Ptr _pc, 
-        //     Eigen::Vector3d centroid, Eigen::Vector3d dimension)
-        // {   
-        //     pcl::PointCloud<pcl::PointXYZ>::Ptr output(
-        //         new pcl::PointCloud<pcl::PointXYZ>);
-
-        //     Eigen::Vector3d min = centroid - (dimension / 2);
-        //     Eigen::Vector3d max = centroid + (dimension / 2);
-
-        //     pcl::CropBox<pcl::PointXYZ> box_filter;
-        //     box_filter.setMin(Eigen::Vector4f(min.x(), min.y(), min.z(), 1.0));
-        //     box_filter.setMax(Eigen::Vector4f(max.x(), max.y(), max.z(), 1.0));
-
-        //     box_filter.setInputCloud(_pc);
-        //     box_filter.filter(*output);
-
-        //     return output;
-        // }
 };

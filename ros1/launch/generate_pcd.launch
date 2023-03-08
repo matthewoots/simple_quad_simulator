@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<launch>
+    <node pkg="px4sim1" type="map_generation" name="map_generation" output="screen">
+        <rosparam command="load" file="$(find px4sim1)/../config/map_generate.yaml" />
+        <param name="path" value="$(find quad1)/../data/"/>
+    </node>
+</launch>

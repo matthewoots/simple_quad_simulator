@@ -6,19 +6,18 @@ void quad_class::command_callback(const mavros_msgs::PositionTarget::ConstPtr &m
 
 	command_time = ros::Time::now();
 
-	sc.pos = Eigen::Vector3d(msg->position.x, msg->position.y, msg->position.z);
-	sc.vel = Eigen::Vector3d(msg->velocity.x, msg->velocity.y, msg->velocity.z);
-	sc.acc = Eigen::Vector3d(msg->acceleration_or_force.x, msg->acceleration_or_force.y, msg->acceleration_or_force.z);
-	double yaw = msg->yaw;
-	sc.q = calc_uav_orientation(sc.acc, yaw);
-	last_yaw = yaw;
+	_desired.pos = Eigen::Vector3d(msg->position.x, msg->position.y, msg->position.z);
+	_desired.vel = Eigen::Vector3d(msg->velocity.x, msg->velocity.y, msg->velocity.z);
+	_desired.acc = Eigen::Vector3d(msg->acceleration_or_force.x, msg->acceleration_or_force.y, msg->acceleration_or_force.z);
+	_desired.q = calc_uav_orientation(_desired.acc, msg->yaw);
+	_desired.yaw = msg->yaw;
 
 	geometry_msgs::PointStamped target;
 	target.header.stamp = ros::Time::now();
 	target.header.frame_id = "world";
-	target.point.x = sc.pos[0];
-	target.point.y = sc.pos[1];
-	target.point.z = sc.pos[2];
+	target.point.x = _desired.pos[0];
+	target.point.y = _desired.pos[1];
+	target.point.z = _desired.pos[2];
 	_cmd_pub.publish(target);
 
 	odom.twist.twist.linear.x = 0.0;
@@ -28,8 +27,6 @@ void quad_class::command_callback(const mavros_msgs::PositionTarget::ConstPtr &m
 	odom.twist.twist.angular.x = 0.0;
 	odom.twist.twist.angular.y = 0.0;
 	odom.twist.twist.angular.z = 0.0;
-
-	received_target = true;
 }
 
 void quad_class::trajectory_callback(const trajectory_msgs::JointTrajectory::ConstPtr &msg)
@@ -44,22 +41,6 @@ void quad_class::trajectory_callback(const trajectory_msgs::JointTrajectory::Con
 	traj_pos_vector.clear();
 	traj_vector = joint_trajectory_to_state(copy_msg);
 }
-
-// void quad_class::pcl2_callback(const sensor_msgs::PointCloud2ConstPtr& msg)
-// {	
-// 	pcl::PointCloud<pcl::PointXYZ>::Ptr full_cloud = pcl2_converter(*msg);
-
-// 	Eigen::Vector3d pose = Eigen::Vector3d(
-// 		odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
-//     Eigen::Vector3d sensing_map_size = Eigen::Vector3d(
-// 		_sensing_range*2, _sensing_range*2, _sensing_range*2);
-// 	pcl::PointCloud<pcl::PointXYZ>::Ptr local_cloud = pcl_ptr_box_crop(
-// 		full_cloud, pose, sensing_map_size);
-	
-// 	sensor_msgs::PointCloud2 cloud_msg;
-//     pcl::toROSMsg(*local_cloud, cloud_msg);
-//     _local_pcl_pub.publish(cloud_msg);
-// }
 
 bool quad_class::check_sent_command(double tolerance)
 {
@@ -109,37 +90,6 @@ void quad_class::drone_timer(const ros::TimerEvent &)
 		last_pose_time = ros::Time::now();
 	}
 
-	sensor_msgs::JointState js;
-	js.header.stamp = ros::Time::now();
-	js.name.push_back(uav_id_char);
-	js.position.push_back(odom.pose.pose.position.x);
-	js.position.push_back(odom.pose.pose.position.y);
-	js.position.push_back(odom.pose.pose.position.z);
-
-	js.velocity.push_back((
-		odom.pose.pose.position.x - previous_odom.pose.pose.position.x) / _simulation_interval); 
-	js.velocity.push_back((
-		odom.pose.pose.position.y - previous_odom.pose.pose.position.y) / _simulation_interval);
-	js.velocity.push_back((
-		odom.pose.pose.position.z - previous_odom.pose.pose.position.z) / _simulation_interval);
-
-	// std::cout << "[quad] " << KGRN << (odom.pose.pose.position.x - previous_odom.pose.pose.position.x) <<
-    //     " " << (odom.pose.pose.position.y - previous_odom.pose.pose.position.y) << " " << 
-	// 	(odom.pose.pose.position.z - previous_odom.pose.pose.position.z) << KNRM << std::endl;
-
-	// js.velocity.push_back(odom.twist.twist.linear.x);
-	// js.velocity.push_back(odom.twist.twist.linear.y);
-	// js.velocity.push_back(odom.twist.twist.linear.z);
-
-	js.effort.push_back(odom.pose.pose.orientation.w);
-	js.effort.push_back(odom.pose.pose.orientation.x);
-	js.effort.push_back(odom.pose.pose.orientation.y);
-	js.effort.push_back(odom.pose.pose.orientation.z);
-
-	_agent_pub.publish(js);
-
-	previous_odom = odom;
-
 	/** @brief For visualization */
 	visualize_uav();
 	visualize_log_path();
@@ -154,7 +104,26 @@ void quad_class::map_timer(const ros::TimerEvent &)
 	nav_msgs::Odometry odom_copy = odom;
 	odometry_mutex.unlock();
 
-	render_sensed_points(odom_copy);
+	Eigen::Quaterniond q;
+	q.x() = odom_copy.pose.pose.orientation.x;
+	q.y() = odom_copy.pose.pose.orientation.y;
+	q.z() = odom_copy.pose.pose.orientation.z;
+	q.w() = odom_copy.pose.pose.orientation.w;
+	Eigen::Matrix3d rot(q);
+	Eigen::Vector3d pos(
+		odom_copy.pose.pose.position.x, 
+		odom_copy.pose.pose.position.y, 
+		odom_copy.pose.pose.position.z);
+
+	pcl::PointCloud<pcl::PointXYZ> depth_map;      
+	_laser.render_sensed_points(pos, rot, depth_map);
+
+	sensor_msgs::PointCloud2 local_map_msg;
+    pcl::toROSMsg(depth_map, local_map_msg);
+    local_map_msg.header.frame_id = "world";
+    local_map_msg.header.stamp = ros::Time::now();
+
+    _local_pcl_pub.publish(local_map_msg);
 	
 	// printf("[quad] %sdrone%d%s mapping time %.3lfms\n", 
 	// 	KGRN, uav_id, KNRM, (ros::Time::now() - start).toSec() * 1000);
@@ -167,52 +136,44 @@ void quad_class::update_odom()
 	odom.header.stamp = ros::Time::now();
 	odom.header.frame_id = "world";
 
-	if (received_target)
-	{	
-		p_c_pos = Eigen::Vector3d(
-			odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
-		
-		p_c_vel = Eigen::Vector3d(
-			odom.twist.twist.linear.x, odom.twist.twist.linear.y, odom.twist.twist.linear.z);
-		
-		p_c_acc = Eigen::Vector3d(
-			odom.twist.twist.angular.x, odom.twist.twist.angular.y, odom.twist.twist.angular.z);
-		
-		// Assuming mass is 1.0
-		// 0.5 * rho * vel^2 * Cd * crossA
-		// drag coefficient 1.0, 1.225kg/m3 density of air
-		// double drag = 0.5 * 1.225 * pow(odom_vel.norm(),2) * 1.0 * 5.0;
-
-		f_c_vel = sc.vel;
-		f_c_acc = sc.acc;
-		f_c_pos = sc.pos;
+	_previous.pos = Eigen::Vector3d(
+		odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
 	
-		received_target = false;
-	}
+	_previous.vel = Eigen::Vector3d(
+		odom.twist.twist.linear.x, odom.twist.twist.linear.y, odom.twist.twist.linear.z);
+	
+	_previous.acc = Eigen::Vector3d(
+		odom.twist.twist.angular.x, odom.twist.twist.angular.y, odom.twist.twist.angular.z);
+		
+	// Assuming mass is 1.0
+	// 0.5 * rho * vel^2 * Cd * crossA
+	// drag coefficient 1.0, 1.225kg/m3 density of air
+	// double drag = 0.5 * 1.225 * pow(odom_vel.norm(),2) * 1.0 * 5.0;
 
-	Eigen::Vector3d c_acc = f_c_acc;
-	Eigen::Vector3d c_vel = f_c_vel;
-	Eigen::Vector3d c_pos = f_c_pos;
+	_current.pos = _desired.pos;
+	_current.vel = _desired.vel;
+	_current.acc = _desired.acc;
+	_current.yaw = _desired.yaw;
 
-	Eigen::Quaterniond q = calc_uav_orientation(c_acc, last_yaw);
+	Eigen::Quaterniond q = calc_uav_orientation(_current.acc, _current.yaw);
 	
 	odometry_mutex.lock();
-	odom.pose.pose.position.x = c_pos[0];
-	odom.pose.pose.position.y = c_pos[1];
-	odom.pose.pose.position.z = c_pos[2];
+	odom.pose.pose.position.x = _current.pos[0];
+	odom.pose.pose.position.y = _current.pos[1];
+	odom.pose.pose.position.z = _current.pos[2];
 
 	odom.pose.pose.orientation.w = q.w();
 	odom.pose.pose.orientation.x = q.x();
 	odom.pose.pose.orientation.y = q.y();
 	odom.pose.pose.orientation.z = q.z();
 
-	odom.twist.twist.linear.x = c_vel[0];
-	odom.twist.twist.linear.y = c_vel[1];
-	odom.twist.twist.linear.z = c_vel[2];
+	odom.twist.twist.linear.x = _current.vel[0];
+	odom.twist.twist.linear.y = _current.vel[1];
+	odom.twist.twist.linear.z = _current.vel[2];
 
-	odom.twist.twist.angular.x = c_acc[0];
-	odom.twist.twist.angular.y = c_acc[1];
-	odom.twist.twist.angular.z = c_acc[2];
+	odom.twist.twist.angular.x = _current.acc[0];
+	odom.twist.twist.angular.y = _current.acc[1];
+	odom.twist.twist.angular.z = _current.acc[2];
 	odometry_mutex.unlock();
 }
 
@@ -220,38 +181,37 @@ void quad_class::stop_and_hover()
 {	
 	std::lock_guard<std::mutex> cmd_lock(command_mutex);
 
-	sc.vel = Eigen::Vector3d(0, 0, 0);
-	sc.acc = Eigen::Vector3d(0, 0, 0);
-	double yaw = last_yaw;
-	sc.q = calc_uav_orientation(sc.acc, yaw);
+	_current.vel = Eigen::Vector3d(0, 0, 0);
+	_current.acc = Eigen::Vector3d(0, 0, 0);
+	_current.q = calc_uav_orientation(_current.acc, _current.yaw);
 }
 
 void quad_class::visualize_uav()
 {
 	std::lock_guard<std::mutex> odom_lock(odometry_mutex);
 
-	visualization_msgs::Marker meshROS;
+	visualization_msgs::Marker mesh;
 
-	// Mesh model
-	meshROS.header.frame_id = "world";
-	meshROS.header.stamp = odom.header.stamp;
-	meshROS.ns = "drone";
-	meshROS.id = uav_id;
-	meshROS.type = visualization_msgs::Marker::MESH_RESOURCE;
-	meshROS.action = visualization_msgs::Marker::ADD;
+	// input mesh model
+	mesh.header.frame_id = "world";
+	mesh.header.stamp = odom.header.stamp;
+	mesh.ns = "drone";
+	mesh.id = uav_id;
+	mesh.type = visualization_msgs::Marker::MESH_RESOURCE;
+	mesh.action = visualization_msgs::Marker::ADD;
 
 	// Copy posestamped message
-	meshROS.pose = odom.pose.pose;
+	mesh.pose = odom.pose.pose;
 
-	meshROS.scale.x = 0.4;
-	meshROS.scale.y = 0.4;
-	meshROS.scale.z = 0.4;
-	meshROS.color.a = 0.7;
-	meshROS.color.r = 0.5;
-	meshROS.color.g = 0.5;
-	meshROS.color.b = 0.5;
-	meshROS.mesh_resource = _mesh_resource;
-	_mesh_pub.publish(meshROS);
+	mesh.scale.x = 0.4;
+	mesh.scale.y = 0.4;
+	mesh.scale.z = 0.4;
+	mesh.color.a = 0.7;
+	mesh.color.r = 0.5;
+	mesh.color.g = 0.5;
+	mesh.color.b = 0.5;
+	mesh.mesh_resource = _mesh_resource;
+	_mesh_pub.publish(mesh);
 }
 
 Eigen::Quaterniond quad_class::calc_uav_orientation(
@@ -307,15 +267,15 @@ void quad_class::visualize_traj_path()
 	display_marker_list(traj_pos_vector, 0.1, color_vect, uav_id);
 }
 
-std::vector<quad_class::state_command> quad_class::joint_trajectory_to_state(
+std::vector<quad_class::state> quad_class::joint_trajectory_to_state(
 	trajectory_msgs::JointTrajectory jt)
 {
-	std::vector<quad_class::state_command> t_vect;
+	std::vector<quad_class::state> t_vect;
 	// Size of joint trajectory
 	int size_of_vector = (int)jt.points.size();
 	for (int i = 0; i < size_of_vector; i++)
 	{
-		quad_class::state_command s;
+		quad_class::state s;
 		if (!jt.points[i].positions.empty())
 			s.pos = Eigen::Vector3d(jt.points[i].positions[0],
 					jt.points[i].positions[1], 
@@ -373,4 +333,23 @@ void quad_class::display_marker_list(
 	}
 	_log_traj_pub.publish(sphere);
 	_log_traj_pub.publish(line_strip);
+}
+
+geometry_msgs::PoseStamped quad_class::eigen_to_posestamped(
+	Eigen::Vector3d pos, Eigen::Quaterniond quat)
+{
+	geometry_msgs::PoseStamped msg;
+	msg.header.stamp = ros::Time::now();
+	msg.header.frame_id = "world";
+
+	msg.pose.position.x = pos.x();
+	msg.pose.position.y = pos.y();
+	msg.pose.position.z = pos.z();
+	
+	msg.pose.orientation.x = quat.x();
+	msg.pose.orientation.y = quat.y();
+	msg.pose.orientation.z = quat.z();
+	msg.pose.orientation.w = quat.w();
+
+	return msg;
 }

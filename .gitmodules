@@ -1,0 +1,3 @@
+[submodule "external/px4_mc_controller"]
+	path = external/px4_mc_controller
+	url = git@github.com:matthewoots/px4_mc_controller.git
