@@ -31,14 +31,12 @@ catkin_package(
   mavros_msgs
   trajectory_msgs
   pcl_ros
-
-  DEPENDS
-  Eigen3
 )
+
+add_subdirectory(../external/laser_simulator laser_simulator)
 
 include_directories(
   include
-  ../external
   ${catkin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIR}
   ${PCL_INCLUDE_DIRS}
@@ -47,11 +45,11 @@ include_directories(
 add_executable (px4_quad_node 
   src/main.cpp
   src/quad.cpp
-  ../external/laser_simulator/zju_laser_sim.cpp
 )
 target_link_libraries(px4_quad_node
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
+  laser_simulator
 )
 
 add_executable (map_generation

@@ -36,7 +36,7 @@
 
 #include <tf/tf.h>
 
-#include <laser_simulator/zju_laser_sim.h>
+#include <zju_laser_sim.h>
 
 #define KNRM  "\033[0m"
 #define KRED  "\033[31m"
